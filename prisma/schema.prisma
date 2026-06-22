@@ -1,0 +1,49 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Trade {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  ticker      String
+  type        String
+  side        String
+  quantity    Float
+  entryPrice  Float
+  exitPrice   Float?
+  status      String   @default("OPEN")
+
+  optionType  String?
+  strike      Float?
+  expiration  String?
+
+  strategy    String?
+  notes       String?
+  emotion     String?
+  rulesFollowed Boolean @default(true)
+
+  aiComment   AiComment?
+}
+
+model AiComment {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  text      String
+  tradeId   String   @unique
+  trade     Trade    @relation(fields: [tradeId], references: [id])
+}
+
+model CongressTrade {
+  id                String   @id @default(cuid())
+  representative    String
+  ticker            String
+  transactionDate   String
+  type              String
+  amountLow         Float?
+  amountHigh        Float?
+}
