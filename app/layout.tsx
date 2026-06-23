@@ -17,9 +17,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Link href="/trades" className="text-sm text-pink-100/80 hover:text-pink-300 shrink-0">Trades</Link>
           <Link href="/review" className="text-sm text-pink-100/80 hover:text-pink-300 shrink-0">AI Review</Link>
           <Link href="/networth" className="text-sm text-pink-100/80 hover:text-pink-300 shrink-0">Net Worth</Link>
+          <Link href="/options" className="text-sm text-pink-100/80 hover:text-pink-300 shrink-0">Options</Link>
           <Link href="/scan" className="text-sm text-pink-100/80 hover:text-pink-300 shrink-0">Scan</Link>
           <Link href="/learn" className="text-sm text-pink-100/80 hover:text-pink-300 shrink-0">Learn</Link>
-          <Link href="/congress" className="text-sm text-pink-100/80 hover:text-pink-300 shrink-0">vs Congress</Link>
         </nav>
         <main className="p-4 sm:p-6">{children}</main>
       </body>
