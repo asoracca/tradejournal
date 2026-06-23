@@ -20,7 +20,7 @@ export function Blobfish({ level, width = 140, caption, pct }: { level: number; 
   const P4 = "M111 30 C 52 30, 26 100, 44 134 C 58 158, 164 158, 178 130 C 196 98, 170 30, 111 30 Z";
   return (
     <div className="flex flex-col items-center">
-      <svg viewBox="0 0 222 175" width={width} className="blob-float">
+      <svg viewBox="0 0 222 175" width={width} style={{ maxWidth: "92vw", height: "auto" }} className="blob-float">
         <defs>
           <filter id={goo}>
             <feGaussianBlur in="SourceGraphic" stdDeviation="9" result="b" />
@@ -52,7 +52,7 @@ export function Blobfish({ level, width = 140, caption, pct }: { level: number; 
           <path d={mouth} stroke={dark} strokeWidth="6" fill="none" strokeLinecap="round" />
         </g>
       </svg>
-      <span className="mt-2 font-semibold" style={{ color: c2 }}>{label}</span>
+      <span className="mt-2 font-semibold text-center" style={{ color: c2 }}>{label}</span>
     </div>
   );
 }

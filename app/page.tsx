@@ -219,7 +219,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
-        <form onSubmit={submit} className="card p-6 lg:col-span-2 grid grid-cols-2 gap-4">
+        <form onSubmit={submit} className="card p-6 lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
           <h2 className="col-span-2 text-lg font-semibold flex items-center gap-2">
             <span className="text-emerald-400">▮</span> {editingId ? "Edit Position" : "Open a Position"}
             {editingId && <button type="button" onClick={cancelEdit} className="ml-auto text-xs text-gray-400 hover:text-gray-200">cancel edit</button>}
