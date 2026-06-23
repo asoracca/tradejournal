@@ -15,6 +15,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <span className="font-bold text-lg">📈 <span className="gradient-text">Paper Trading AI</span></span>
           <Link href="/" className="text-sm text-gray-300 hover:text-emerald-400">Dashboard</Link>
           <Link href="/trades" className="text-sm text-gray-300 hover:text-emerald-400">Trades</Link>
+          <Link href="/scan" className="text-sm text-gray-300 hover:text-emerald-400">Scan</Link>
           <Link href="/options" className="text-sm text-gray-300 hover:text-emerald-400">Options</Link>
           <Link href="/learn" className="text-sm text-gray-300 hover:text-emerald-400">Learn</Link>
           <Link href="/congress" className="text-sm text-gray-300 hover:text-emerald-400">vs Congress</Link>
