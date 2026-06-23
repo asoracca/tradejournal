@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "re
 type Trade = {
   id: string; createdAt: string; ticker: string; type: string; side: string;
   quantity: number; entryPrice: number; exitPrice: number | null; status: string;
-  optionType: string | null; strike: number | null; notes: string | null;
+  optionType: string | null; strike: number | null; strategy: string | null; notes: string | null;
   aiComment?: { text: string } | null;
 };
 
@@ -26,11 +26,18 @@ const emptyForm = {
 };
 
 function num(v: string): number { const n = parseFloat(v); return isNaN(n) ? 0 : n; }
+function mult(t: Trade): number { return t.type === "OPTION" ? 100 : 1; }
+function dir(t: Trade): number { return t.side === "BUY" ? 1 : -1; }
+function realized(t: Trade): number { return t.exitPrice != null ? (t.exitPrice - t.entryPrice) * t.quantity * mult(t) * dir(t) : 0; }
+function unreal(t: Trade, price?: number): number | null { return price != null ? (price - t.entryPrice) * t.quantity * mult(t) * dir(t) : null; }
+function pnl(n: number): string { return (n >= 0 ? "+$" : "-$") + Math.abs(n).toFixed(2); }
+function tone(n: number): string { return n > 0 ? "text-emerald-400" : n < 0 ? "text-red-400" : "text-gray-300"; }
 
 export default function Dashboard() {
   const [trades, setTrades] = useState<Trade[]>([]);
+  const [prices, setPrices] = useState<Record<string, number>>({});
   const [form, setForm] = useState(emptyForm);
-  const [accountSize, setAccountSize] = useState("10000");
+  const [startBalStr, setStartBalStr] = useState("100000");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,26 +51,38 @@ export default function Dashboard() {
     } catch (e) { setError((e as Error).message); }
   }
 
+  async function loadPrices(symbols: string[]) {
+    const entries = await Promise.all(symbols.map(async (s) => {
+      try {
+        const r = await fetch("/api/quote?ticker=" + encodeURIComponent(s));
+        if (!r.ok) return null;
+        const q = await r.json();
+        return typeof q.price === "number" ? ([s, q.price] as [string, number]) : null;
+      } catch { return null; }
+    }));
+    setPrices(Object.fromEntries(entries.filter(Boolean) as [string, number][]));
+  }
+
   useEffect(() => { loadTrades(); }, []);
+  useEffect(() => {
+    const syms = Array.from(new Set(trades.filter((t) => t.status === "OPEN" && t.type !== "OPTION").map((t) => t.ticker)));
+    if (syms.length) loadPrices(syms);
+  }, [trades]);
 
   function update(field: string, value: string) { setForm((f) => ({ ...f, [field]: value })); }
 
-  const mult = form.type === "OPTION" ? 100 : 1;
+  const m = form.type === "OPTION" ? 100 : 1;
   const calc = useMemo(() => {
     const entry = num(form.entryPrice), stop = num(form.stopLoss), target = num(form.target);
-    const qty = num(form.quantity), acct = num(accountSize);
-    const riskPerUnit = stop ? Math.abs(entry - stop) : 0;
-    const rewardPerUnit = target ? Math.abs(target - entry) : 0;
-    const totalRisk = riskPerUnit * qty * mult;
-    const totalReward = rewardPerUnit * qty * mult;
+    const qty = num(form.quantity), acct = num(startBalStr);
+    const totalRisk = (stop ? Math.abs(entry - stop) : 0) * qty * m;
+    const totalReward = (target ? Math.abs(target - entry) : 0) * qty * m;
     const riskPct = acct ? (totalRisk / acct) * 100 : 0;
     const rr = totalRisk ? totalReward / totalRisk : 0;
     return { totalRisk, totalReward, riskPct, rr };
-  }, [form.entryPrice, form.stopLoss, form.target, form.quantity, accountSize, mult]);
+  }, [form.entryPrice, form.stopLoss, form.target, form.quantity, startBalStr, m]);
 
-  const riskTone = calc.riskPct === 0 ? "text-gray-400"
-    : calc.riskPct <= 1 ? "text-emerald-400"
-    : calc.riskPct <= 2 ? "text-yellow-400" : "text-red-400";
+  const riskTone = calc.riskPct === 0 ? "text-gray-400" : calc.riskPct <= 1 ? "text-emerald-400" : calc.riskPct <= 2 ? "text-yellow-400" : "text-red-400";
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -73,7 +92,6 @@ export default function Dashboard() {
         form.notes,
         form.stopLoss ? "Stop: " + form.stopLoss : "",
         form.target ? "Target: " + form.target : "",
-        calc.riskPct ? "Risk: " + calc.riskPct.toFixed(2) + "% ($" + calc.totalRisk.toFixed(0) + ")" : "",
         calc.rr ? "R:R 1:" + calc.rr.toFixed(2) : "",
       ].filter(Boolean).join(" | ");
       const res = await fetch("/api/trades", {
@@ -87,32 +105,48 @@ export default function Dashboard() {
     } catch (e) { setError((e as Error).message); } finally { setLoading(false); }
   }
 
-  const stats = useMemo(() => {
-    const total = trades.length;
-    const open = trades.filter((t) => t.status === "OPEN").length;
-    const closed = trades.filter((t) => t.status !== "OPEN");
-    const wins = closed.filter((t) => t.exitPrice != null &&
-      (t.side === "BUY" ? t.exitPrice > t.entryPrice : t.exitPrice < t.entryPrice)).length;
-    const winRate = closed.length ? Math.round((wins / closed.length) * 100) : 0;
-    return { total, open, closed: closed.length, winRate };
-  }, [trades]);
+  async function closeTrade(t: Trade) {
+    const live = prices[t.ticker];
+    const input = window.prompt("Close " + t.ticker + " — enter the price you're closing at:", live ? String(live) : "");
+    if (!input) return;
+    await fetch("/api/trades/" + t.id, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ exitPrice: Number(input), status: "CLOSED" }),
+    });
+    await loadTrades();
+  }
+
+  async function deleteTrade(t: Trade) {
+    if (!window.confirm("Delete this trade?")) return;
+    await fetch("/api/trades/" + t.id, { method: "DELETE" });
+    await loadTrades();
+  }
+
+  const open = trades.filter((t) => t.status === "OPEN");
+  const closed = trades.filter((t) => t.status !== "OPEN");
+  const startBal = num(startBalStr);
+  const realizedTotal = closed.reduce((a, t) => a + realized(t), 0);
+  const openTotal = open.reduce((a, t) => a + (unreal(t, prices[t.ticker]) ?? 0), 0);
+  const equity = startBal + realizedTotal + openTotal;
+  const wins = closed.filter((t) => realized(t) > 0).length;
+  const winRate = closed.length ? Math.round((wins / closed.length) * 100) : 0;
 
   const isOption = form.type === "OPTION";
-  const maxRisk = num(accountSize) * 0.02;
   const stratDesc = STRATEGIES.find((s) => s.name === form.strategy)?.desc;
 
   return (
     <div className="space-y-8 max-w-6xl mx-auto">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold gradient-text">Trading Dashboard</h1>
-          <p className="text-gray-500 text-sm mt-1">Plan every trade. Know your risk before you enter.</p>
+          <h1 className="text-3xl font-bold gradient-text">Paper Trading Desk</h1>
+          <p className="text-gray-500 text-sm mt-1">Practice with fake money and live market prices. No real funds at risk.</p>
           <a href="/learn" className="text-xs text-emerald-400 hover:underline">New to trading? Read the quick guide →</a>
         </div>
         <label className="card px-4 py-2 flex items-center gap-3">
-          <span className="text-xs uppercase tracking-wide text-gray-500">Account Size</span>
+          <span className="text-xs uppercase tracking-wide text-gray-500">Starting Balance</span>
           <span className="text-gray-500">$</span>
-          <input className="bg-transparent w-28 outline-none text-emerald-400 font-mono" value={accountSize} onChange={(e) => setAccountSize(e.target.value)} />
+          <input className="bg-transparent w-28 outline-none text-emerald-400 font-mono" value={startBalStr} onChange={(e) => setStartBalStr(e.target.value)} />
         </label>
       </header>
 
@@ -123,22 +157,22 @@ export default function Dashboard() {
       )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Stat label="Total Trades" value={String(stats.total)} />
-        <Stat label="Open" value={String(stats.open)} accent="text-emerald-400" />
-        <Stat label="Closed" value={String(stats.closed)} />
-        <Stat label="Win Rate" value={stats.closed ? stats.winRate + "%" : "—"} accent="text-emerald-400" />
+        <Stat label="Account Equity" value={"$" + equity.toFixed(0)} accent={tone(equity - startBal)} />
+        <Stat label="Realized P&L" value={pnl(realizedTotal)} accent={tone(realizedTotal)} />
+        <Stat label="Open P&L" value={pnl(openTotal)} accent={tone(openTotal)} />
+        <Stat label="Win Rate" value={closed.length ? winRate + "%" : "—"} accent="text-emerald-400" />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
         <form onSubmit={submit} className="card p-6 lg:col-span-2 grid grid-cols-2 gap-4">
-          <h2 className="col-span-2 text-lg font-semibold flex items-center gap-2"><span className="text-emerald-400">▮</span> Log a Trade</h2>
-          <Field label="Ticker"><input className="input uppercase" value={form.ticker} onChange={(e) => update("ticker", e.target.value)} placeholder="AAPL" required /></Field>
+          <h2 className="col-span-2 text-lg font-semibold flex items-center gap-2"><span className="text-emerald-400">▮</span> Open a Position</h2>
+          <Field label="Ticker"><input className="input uppercase" value={form.ticker} onChange={(e) => update("ticker", e.target.value)} placeholder="AAPL  (futures: ES=F)" required /></Field>
           <Field label="Type"><select className="input" value={form.type} onChange={(e) => update("type", e.target.value)}><option value="STOCK">Stock</option><option value="OPTION">Option</option><option value="FUTURE">Future</option></select></Field>
           <Field label="Side"><select className="input" value={form.side} onChange={(e) => update("side", e.target.value)}><option value="BUY">Buy / Long</option><option value="SELL">Sell / Short</option></select></Field>
           <Field label="Quantity"><input className="input" type="number" step="any" value={form.quantity} onChange={(e) => update("quantity", e.target.value)} required /></Field>
           <Field label="Entry Price"><input className="input" type="number" step="any" value={form.entryPrice} onChange={(e) => update("entryPrice", e.target.value)} required /></Field>
-          <Field label="Stop Loss"><input className="input" type="number" step="any" value={form.stopLoss} onChange={(e) => update("stopLoss", e.target.value)} placeholder="protect downside" /></Field>
-          <Field label="Target / Take Profit"><input className="input" type="number" step="any" value={form.target} onChange={(e) => update("target", e.target.value)} placeholder="profit goal" /></Field>
+          <Field label="Stop Loss"><input className="input" type="number" step="any" value={form.stopLoss} onChange={(e) => update("stopLoss", e.target.value)} placeholder="optional" /></Field>
+          <Field label="Target"><input className="input" type="number" step="any" value={form.target} onChange={(e) => update("target", e.target.value)} placeholder="optional" /></Field>
           {isOption && (<>
             <Field label="Call / Put"><select className="input" value={form.optionType} onChange={(e) => update("optionType", e.target.value)}><option value="CALL">Call</option><option value="PUT">Put</option></select></Field>
             <Field label="Strike"><input className="input" type="number" step="any" value={form.strike} onChange={(e) => update("strike", e.target.value)} /></Field>
@@ -148,35 +182,31 @@ export default function Dashboard() {
             <Field label="Strategy"><select className="input" value={form.strategy} onChange={(e) => update("strategy", e.target.value)}>{STRATEGIES.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}</select></Field>
             <p className="text-xs text-gray-500 mt-1">{stratDesc}</p>
           </div>
-          <div className="col-span-2"><Field label="Emotion"><input className="input" value={form.emotion} onChange={(e) => update("emotion", e.target.value)} placeholder="calm, fomo..." /></Field></div>
           <div className="col-span-2"><Field label="Notes"><textarea className="input" rows={2} value={form.notes} onChange={(e) => update("notes", e.target.value)} /></Field></div>
-          <div className="col-span-2 flex items-center gap-3 flex-wrap">
-            <button type="submit" disabled={loading} className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-lg px-5 py-2.5 font-medium shadow-lg shadow-emerald-900/40 transition">{loading ? "Saving..." : "Add Trade"}</button>
-            <span className="text-xs text-gray-500">Recommended max risk: <span className="text-emerald-400 font-mono">${maxRisk.toFixed(0)}</span> (2%)</span>
+          <div className="col-span-2">
+            <button type="submit" disabled={loading} className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-lg px-5 py-2.5 font-medium shadow-lg shadow-emerald-900/40 transition">{loading ? "Opening..." : "Open Position"}</button>
           </div>
         </form>
 
         <div className="space-y-6">
           <div className="card p-5">
-            <h3 className="text-sm uppercase tracking-wide text-gray-500 mb-4">Risk Analysis</h3>
+            <h3 className="text-sm uppercase tracking-wide text-gray-500 mb-4">Trade Planner</h3>
             <Metric label="Risk on this trade" value={calc.totalRisk ? "$" + calc.totalRisk.toFixed(2) : "—"} tone={riskTone} />
             <Metric label="% of account" value={calc.riskPct ? calc.riskPct.toFixed(2) + "%" : "—"} tone={riskTone} />
             <Metric label="Potential profit" value={calc.totalReward ? "$" + calc.totalReward.toFixed(2) : "—"} tone="text-emerald-400" />
             <Metric label="Risk : Reward" value={calc.rr ? "1 : " + calc.rr.toFixed(2) : "—"} tone={calc.rr >= 2 ? "text-emerald-400" : "text-gray-300"} />
             <div className="mt-4 text-xs leading-relaxed text-gray-400 border-t border-gray-800 pt-3">
-              {calc.riskPct === 0 ? "Add an entry, stop loss and quantity to see your risk."
+              {calc.riskPct === 0 ? "Add entry, stop loss and quantity to plan your risk."
                 : calc.riskPct <= 2 ? "✓ Risk is within the beginner-safe 1–2% range."
                 : "⚠ This risks more than 2% of your account. Consider a tighter stop or smaller size."}
             </div>
           </div>
-
           <div className="card p-5">
             <h3 className="text-sm uppercase tracking-wide text-gray-500 mb-3">🤖 Starter Tips</h3>
             <ul className="text-sm text-gray-300 space-y-2 list-disc list-inside">
               <li>Risk only 1–2% of your account per trade.</li>
               <li>Always set a stop loss before entering.</li>
               <li>Aim for a Risk:Reward of 1:2 or better.</li>
-              <li>Write down your reason — review it later.</li>
             </ul>
             <a href="/learn" className="mt-3 inline-block text-xs text-emerald-400 hover:underline">Read full strategy guide →</a>
           </div>
@@ -184,23 +214,54 @@ export default function Dashboard() {
       </div>
 
       <section>
-        <h2 className="text-xl font-bold mb-4">Recent Trades</h2>
-        {trades.length === 0 ? (
-          <p className="text-gray-500">{error ? "Can't load trades yet." : "No trades yet. Add one above."}</p>
+        <h2 className="text-xl font-bold mb-4">Open Positions</h2>
+        {open.length === 0 ? (
+          <p className="text-gray-500">No open positions. Open one above.</p>
         ) : (
           <div className="space-y-3">
-            {trades.map((t) => (
-              <div key={t.id} className="card p-4">
-                <div className="flex items-center gap-3 flex-wrap">
+            {open.map((t) => {
+              const price = prices[t.ticker];
+              const u = unreal(t, price);
+              return (
+                <div key={t.id} className="card p-4 flex items-center gap-3 flex-wrap">
                   <span className="font-bold text-lg">{t.ticker}</span>
                   <span className={"text-xs px-2 py-0.5 rounded-full " + (t.side === "BUY" ? "bg-emerald-900/50 text-emerald-300" : "bg-red-900/50 text-red-300")}>{t.side}</span>
                   <span className="text-gray-400 text-sm font-mono">{t.quantity} @ {t.entryPrice}{t.type === "OPTION" && t.strike ? " " + t.optionType + " " + t.strike : ""}</span>
-                  <span className="ml-auto text-xs text-gray-500 uppercase">{t.type}</span>
+                  <span className="text-xs text-gray-500 uppercase">{t.type}</span>
+                  <span className="text-sm font-mono text-gray-300">{price != null ? "Now: " + price.toFixed(2) : t.type === "OPTION" ? "live N/A" : "—"}</span>
+                  <span className={"text-sm font-mono font-semibold " + (u == null ? "text-gray-500" : tone(u))}>{u == null ? "" : pnl(u)}</span>
+                  <span className="ml-auto flex gap-2">
+                    <button onClick={() => closeTrade(t)} className="text-xs bg-gray-800 hover:bg-gray-700 rounded px-3 py-1">Close</button>
+                    <button onClick={() => deleteTrade(t)} className="text-xs text-gray-500 hover:text-red-400 px-2">✕</button>
+                  </span>
                 </div>
-                {t.notes && <p className="mt-2 text-xs text-gray-500 font-mono">{t.notes}</p>}
-                {t.aiComment?.text && <p className="mt-2 text-sm text-gray-300 border-l-2 border-emerald-700 pl-3">🤖 {t.aiComment.text}</p>}
-              </div>
-            ))}
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <section>
+        <h2 className="text-xl font-bold mb-4">Trade History</h2>
+        {closed.length === 0 ? (
+          <p className="text-gray-500">No closed trades yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {closed.map((t) => {
+              const r = realized(t);
+              return (
+                <div key={t.id} className="card p-4">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className="font-bold">{t.ticker}</span>
+                    <span className={"text-xs px-2 py-0.5 rounded-full " + (t.side === "BUY" ? "bg-emerald-900/50 text-emerald-300" : "bg-red-900/50 text-red-300")}>{t.side}</span>
+                    <span className="text-gray-400 text-sm font-mono">{t.quantity} @ {t.entryPrice} → {t.exitPrice}</span>
+                    <span className={"text-sm font-mono font-semibold " + tone(r)}>{pnl(r)}</span>
+                    <button onClick={() => deleteTrade(t)} className="ml-auto text-xs text-gray-500 hover:text-red-400 px-2">✕</button>
+                  </div>
+                  {t.aiComment?.text && <p className="mt-2 text-sm text-gray-300 border-l-2 border-emerald-700 pl-3">🤖 {t.aiComment.text}</p>}
+                </div>
+              );
+            })}
           </div>
         )}
       </section>
