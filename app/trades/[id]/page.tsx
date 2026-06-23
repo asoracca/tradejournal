@@ -1,12 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, CartesianGrid } from "recharts";
+import { Blobfish } from "../../blobfish";
 
 type Trade = { id: string; ticker: string; type: string; side: string; quantity: number; entryPrice: number; exitPrice: number | null; status: string; createdAt: string; strategy: string | null; notes: string | null; optionType: string | null; strike: number | null; aiComment?: { text: string } | null };
 type Hist = { date: string; close: number };
 type News = { title: string; publisher: string; link: string; time: number };
+
+const LEV3 = ["SOXL", "SOXS", "TQQQ", "SQQQ", "KORU", "UPRO", "SPXL", "SPXU", "TNA", "TZA", "LABU", "LABD", "NUGT", "DUST", "YINN", "YANG", "UDOW", "SDOW", "FNGU", "BULZ", "WEBL", "FAS", "FAZ"];
+
+function riskInfo(t: Trade): { score: number; reason: string } {
+  let s = 0.6;
+  let reason = "A standard position — manage it with a stop loss and position sizing.";
+  if (LEV3.includes(t.ticker)) { s += 2.2; reason = t.ticker + " is a 3x leveraged ETF — daily moves are tripled, and it loses value if held through choppy markets. A trading tool, not a buy-and-hold investment."; }
+  if (t.type === "FUTURE") { s += 2.2; reason = "Futures are highly leveraged — a small price move becomes a large dollar swing. Keep size small."; }
+  if (t.type === "OPTION") { s += 1.6; reason = "Options carry leverage and an expiration date — they can expire worthless if the move doesn't happen in time."; }
+  if (t.side === "SELL") s += 0.4;
+  return { score: Math.min(s, 4), reason };
+}
 
 export default function TradeDetail({ params }: { params: { id: string } }) {
   const [trade, setTrade] = useState<Trade | null>(null);
@@ -15,6 +28,13 @@ export default function TradeDetail({ params }: { params: { id: string } }) {
   const [analysis, setAnalysis] = useState<string>("");
   const [loadingA, setLoadingA] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const blobRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onScroll = () => { if (blobRef.current) blobRef.current.style.transform = "rotate(" + (window.scrollY * 0.45) + "deg)"; };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -46,6 +66,9 @@ export default function TradeDetail({ params }: { params: { id: string } }) {
   if (err) return <div className="max-w-3xl mx-auto"><Link href="/trades" className="text-emerald-400 text-sm">← Back</Link><p className="text-gray-400 mt-4">{err}.</p></div>;
   if (!trade) return <div className="max-w-3xl mx-auto text-gray-500">Loading…</div>;
 
+  const risk = riskInfo(trade);
+  const riskWord = risk.score < 1 ? "Low risk" : risk.score < 2 ? "Moderate risk" : risk.score < 3 ? "High risk" : "Extreme risk";
+  const riskColor = risk.score < 1 ? "#34d399" : risk.score < 2 ? "#f472b6" : risk.score < 3 ? "#fb7185" : "#ef4444";
   const pnl = trade.exitPrice != null ? (trade.exitPrice - trade.entryPrice) * trade.quantity * (trade.type === "OPTION" ? 100 : 1) * (trade.side === "BUY" ? 1 : -1) : null;
 
   return (
@@ -58,6 +81,15 @@ export default function TradeDetail({ params }: { params: { id: string } }) {
         <span className="text-xs px-2 py-1 rounded-full bg-gray-800 text-gray-400 uppercase">{trade.type}</span>
         <span className={"text-xs px-2 py-1 rounded-full " + (trade.status === "OPEN" ? "bg-sky-900/50 text-sky-300" : "bg-gray-800 text-gray-400")}>{trade.status}</span>
       </header>
+
+      <div className="card relative overflow-hidden flex flex-col items-center justify-center text-center py-16 px-6" style={{ minHeight: "60vh" }}>
+        <div ref={blobRef} style={{ transition: "transform 0.08s linear", willChange: "transform" }}>
+          <Blobfish level={risk.score} width={440} caption="" />
+        </div>
+        <div className="mt-6 text-3xl font-extrabold" style={{ color: riskColor }}>{riskWord}</div>
+        <p className="text-sm text-gray-400 mt-3 max-w-lg leading-relaxed">{risk.reason}</p>
+        <p className="text-xs text-gray-600 mt-4">↓ scroll to spin the blobfish</p>
+      </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="stat"><div className="text-xs uppercase text-gray-500">Entry</div><div className="text-xl font-bold font-mono mt-1">${trade.entryPrice}</div></div>
@@ -90,7 +122,7 @@ export default function TradeDetail({ params }: { params: { id: string } }) {
 
       <div className="card p-5">
         <h2 className="text-sm uppercase tracking-wide text-gray-500 mb-3">📰 Related News</h2>
-        {news.length === 0 ? <p className="text-gray-500 text-sm">No recent headlines found.</p> : (
+        {news.length === 0 ? <p className="text-gray-500 text-sm">No recent headlines found for {trade.ticker}.</p> : (
           <ul className="space-y-3">
             {news.map((n, i) => (
               <li key={i}>

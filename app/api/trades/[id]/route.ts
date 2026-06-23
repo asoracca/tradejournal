@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../lib/db";
 
+const numOrNull = (v: unknown) => (v == null || v === "" ? null : Number(v));
+
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const trade = await prisma.trade.findUnique({ where: { id: params.id }, include: { aiComment: true } });
   if (!trade) return NextResponse.json({ error: "not found" }, { status: 404 });
@@ -15,7 +17,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (body.side !== undefined) data.side = body.side;
   if (body.quantity !== undefined) data.quantity = Number(body.quantity);
   if (body.entryPrice !== undefined) data.entryPrice = Number(body.entryPrice);
-  if (body.exitPrice !== undefined) data.exitPrice = body.exitPrice === null ? null : Number(body.exitPrice);
+  if (body.exitPrice !== undefined) data.exitPrice = numOrNull(body.exitPrice);
+  if (body.stopLoss !== undefined) data.stopLoss = numOrNull(body.stopLoss);
+  if (body.target !== undefined) data.target = numOrNull(body.target);
   if (body.status !== undefined) data.status = body.status;
   if (body.optionType !== undefined) data.optionType = body.optionType || null;
   if (body.strike !== undefined) data.strike = body.strike ? Number(body.strike) : null;
