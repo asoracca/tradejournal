@@ -3,31 +3,49 @@
 @tailwind utilities;
 
 @layer base {
-  body { background: #07070b; overflow-x: hidden; }
+  body {
+    background:
+      radial-gradient(40vw 40vw at 12% 82%, rgba(251,146,60,0.18), transparent 70%),
+      #140a14;
+    overflow-x: hidden;
+  }
   body::before, body::after {
     content: ""; position: fixed; z-index: -1; border-radius: 50%;
-    filter: blur(90px); opacity: 0.35; pointer-events: none;
+    filter: blur(90px); opacity: 0.5; pointer-events: none;
   }
   body::before {
-    width: 48vw; height: 48vw; top: -12vw; right: -8vw;
-    background: radial-gradient(circle, rgba(16,185,129,0.55), transparent 70%);
+    width: 50vw; height: 50vw; top: -12vw; right: -10vw;
+    background: radial-gradient(circle, rgba(244,114,182,0.6), transparent 70%);
     animation: drift1 18s ease-in-out infinite alternate;
   }
   body::after {
-    width: 42vw; height: 42vw; bottom: -14vw; left: -10vw;
-    background: radial-gradient(circle, rgba(59,130,246,0.5), transparent 70%);
+    width: 46vw; height: 46vw; bottom: -16vw; left: -10vw;
+    background: radial-gradient(circle, rgba(168,85,247,0.5), transparent 70%);
     animation: drift2 24s ease-in-out infinite alternate;
   }
 }
 
-@keyframes drift1 { from { transform: translate(0,0) scale(1);} to { transform: translate(-6vw,8vh) scale(1.25);} }
-@keyframes drift2 { from { transform: translate(0,0) scale(1);} to { transform: translate(8vw,-7vh) scale(1.3);} }
-@keyframes blobfloat { 0%,100% { transform: translateY(0) rotate(-1.5deg);} 50% { transform: translateY(-7px) rotate(1.5deg);} }
+@keyframes drift1 { from { transform: translate(0,0) scale(1);} to { transform: translate(-7vw,9vh) scale(1.3);} }
+@keyframes drift2 { from { transform: translate(0,0) scale(1);} to { transform: translate(9vw,-8vh) scale(1.35);} }
+@keyframes blobfloat { 0%,100% { transform: translateY(0) rotate(-1.5deg);} 50% { transform: translateY(-8px) rotate(1.5deg);} }
 
 @layer components {
-  .input { @apply w-full bg-gray-800/60 border border-gray-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/40 transition; }
-  .card { @apply bg-gray-900/60 border border-gray-800 rounded-xl backdrop-blur-sm; }
-  .stat { @apply bg-gray-900/60 border border-gray-800 rounded-xl backdrop-blur-sm p-4; }
-  .gradient-text { @apply bg-gradient-to-r from-emerald-400 via-teal-300 to-sky-400 bg-clip-text text-transparent; }
+  .input { @apply w-full bg-pink-950/30 border border-pink-900/40 rounded-lg px-3 py-2 text-sm outline-none focus:border-pink-400 focus:ring-1 focus:ring-pink-400/40 transition; }
+  .card { @apply bg-[#1a0f1a]/70 border border-pink-900/30 rounded-2xl backdrop-blur-sm; }
+  .stat { @apply bg-[#1a0f1a]/70 border border-pink-900/30 rounded-2xl backdrop-blur-sm p-4; }
+  .gradient-text { @apply bg-gradient-to-r from-pink-400 via-rose-300 to-fuchsia-400 bg-clip-text text-transparent; }
   .blob-float { animation: blobfloat 4s ease-in-out infinite; transform-origin: center; }
 }
+
+/* re-skin the old emerald accents into the pink goo theme */
+.bg-emerald-600 { background-color: #ec4899 !important; }
+.hover\:bg-emerald-500:hover { background-color: #f472b6 !important; }
+.text-emerald-400 { color: #f9a8d4 !important; }
+.text-emerald-300 { color: #fbcfe8 !important; }
+.text-emerald-200 { color: #fce7f3 !important; }
+.border-emerald-700 { border-color: #db2777 !important; }
+.hover\:border-emerald-700:hover { border-color: #db2777 !important; }
+.bg-emerald-900\/50 { background-color: rgba(190,24,93,0.45) !important; }
+.bg-emerald-900\/60 { background-color: rgba(190,24,93,0.55) !important; }
+.bg-emerald-950\/30 { background-color: rgba(131,24,67,0.35) !important; }
+.border-emerald-500\/70 { border-color: rgba(236,72,153,0.7) !important; }
