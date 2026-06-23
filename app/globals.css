@@ -3,17 +3,31 @@
 @tailwind utilities;
 
 @layer base {
-  body {
-    background:
-      radial-gradient(900px 500px at 80% -10%, rgba(16,185,129,0.10), transparent),
-      radial-gradient(700px 400px at 0% 0%, rgba(59,130,246,0.06), transparent),
-      #0a0a0f;
+  body { background: #07070b; overflow-x: hidden; }
+  body::before, body::after {
+    content: ""; position: fixed; z-index: -1; border-radius: 50%;
+    filter: blur(90px); opacity: 0.35; pointer-events: none;
+  }
+  body::before {
+    width: 48vw; height: 48vw; top: -12vw; right: -8vw;
+    background: radial-gradient(circle, rgba(16,185,129,0.55), transparent 70%);
+    animation: drift1 18s ease-in-out infinite alternate;
+  }
+  body::after {
+    width: 42vw; height: 42vw; bottom: -14vw; left: -10vw;
+    background: radial-gradient(circle, rgba(59,130,246,0.5), transparent 70%);
+    animation: drift2 24s ease-in-out infinite alternate;
   }
 }
+
+@keyframes drift1 { from { transform: translate(0,0) scale(1);} to { transform: translate(-6vw,8vh) scale(1.25);} }
+@keyframes drift2 { from { transform: translate(0,0) scale(1);} to { transform: translate(8vw,-7vh) scale(1.3);} }
+@keyframes blobfloat { 0%,100% { transform: translateY(0) rotate(-1.5deg);} 50% { transform: translateY(-7px) rotate(1.5deg);} }
 
 @layer components {
   .input { @apply w-full bg-gray-800/60 border border-gray-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/40 transition; }
   .card { @apply bg-gray-900/60 border border-gray-800 rounded-xl backdrop-blur-sm; }
   .stat { @apply bg-gray-900/60 border border-gray-800 rounded-xl backdrop-blur-sm p-4; }
   .gradient-text { @apply bg-gradient-to-r from-emerald-400 via-teal-300 to-sky-400 bg-clip-text text-transparent; }
+  .blob-float { animation: blobfloat 4s ease-in-out infinite; transform-origin: center; }
 }

@@ -1,7 +1,6 @@
 /**
  * lib/ai.ts — AI trade commentary via Google Gemini (free tier).
- * Set GEMINI_API_KEY in Vercel env vars. Free key at https://aistudio.google.com.
- * The AI gives neutral analytical context, never buy/sell advice.
+ * Narrative, teaching-style feedback. Never buy/sell advice.
  */
 
 import { getQuote, getRealizedVol, getHistory } from "./marketData";
@@ -20,15 +19,10 @@ async function buildContext(trade: TradeContext): Promise<string> {
   const parts: string[] = [];
   try {
     const quote = await getQuote(trade.ticker);
-    parts.push(
-      "Current price: $" + quote.price.toFixed(2) +
-      " (" + (quote.changePercent >= 0 ? "+" : "") + quote.changePercent.toFixed(2) + "% today)"
-    );
+    parts.push("Current price: $" + quote.price.toFixed(2) + " (" + (quote.changePercent >= 0 ? "+" : "") + quote.changePercent.toFixed(2) + "% today)");
     const history = await getHistory(trade.ticker, "1mo");
     if (history.length > 5) {
-      const monthAgo = history[0].close;
-      const latest = history[history.length - 1].close;
-      const change1m = ((latest - monthAgo) / monthAgo) * 100;
+      const change1m = ((history[history.length - 1].close - history[0].close) / history[0].close) * 100;
       parts.push("1-month change: " + (change1m >= 0 ? "+" : "") + change1m.toFixed(1) + "%");
     }
     if (trade.type === "OPTION") {
@@ -50,11 +44,11 @@ export async function generateTradeComment(trade: TradeContext): Promise<string>
   const tradeDescription =
     trade.type === "OPTION"
       ? trade.side + " " + trade.quantity + " " + trade.ticker + " " + trade.strike + " " + trade.optionType + " @ $" + trade.entryPrice
-      : trade.side + " " + trade.quantity + " shares of " + trade.ticker + " @ $" + trade.entryPrice;
+      : trade.side + " " + trade.quantity + " " + trade.ticker + " @ $" + trade.entryPrice;
 
-  const systemPrompt = "You are a markets analyst giving brief, factual context on a paper trade. You do NOT give buy/sell advice or predictions. Describe what is notable given current conditions - recent price action, volatility, position sizing relative to typical risk. Keep it to 2-3 sentences, neutral and analytical. If the trade looks aggressive (large size, far OTM options, chasing a big recent move), say so plainly without being alarmist.";
+  const systemPrompt = "You are a warm, plain-spoken trading mentor giving feedback on a paper trade to a beginner. In 3-4 sentences, explain what is notable and WHY - don't just list stats, explain what they mean. If the instrument is unusual (a 3x leveraged ETF like SOXL/KORU, a far out-of-the-money option, a high-volatility small cap), explain the mechanic plainly, e.g. 'this is a 3x leveraged ETF, so a 5% market move becomes a 15% swing, and it loses value if held through choppy periods.' Call out specifically and concretely why a trade is risky or aggressive if it is - chasing a big run-up, oversized position, leverage, far OTM. Be encouraging, never alarmist, and never give buy/sell advice or price predictions.";
 
-  const userPrompt = "Trade: " + tradeDescription + "\n\nMarket context:\n" + context + "\n\nGive a brief analytical comment on this trade.";
+  const userPrompt = "Trade: " + tradeDescription + "\n\nMarket context:\n" + context + "\n\nGive your mentor-style comment.";
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return "AI key not set.";
@@ -66,7 +60,7 @@ export async function generateTradeComment(trade: TradeContext): Promise<string>
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: systemPrompt }] },
       contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-      generationConfig: { maxOutputTokens: 250, temperature: 0.7 },
+      generationConfig: { maxOutputTokens: 400, temperature: 0.8 },
     }),
   });
   if (!res.ok) {
