@@ -37,6 +37,8 @@ export default function Dashboard() {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [prices, setPrices] = useState<Record<string, number>>({});
   const [form, setForm] = useState(emptyForm);
+  const [sizeMode, setSizeMode] = useState<"shares" | "dollars">("shares");
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [startBalStr, setStartBalStr] = useState("100000");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,16 +73,18 @@ export default function Dashboard() {
 
   function update(field: string, value: string) { setForm((f) => ({ ...f, [field]: value })); }
 
+  const entryNum = num(form.entryPrice);
   const m = form.type === "OPTION" ? 100 : 1;
+  const effShares = (sizeMode === "dollars" && entryNum > 0) ? num(form.quantity) / entryNum : num(form.quantity);
+
   const calc = useMemo(() => {
-    const entry = num(form.entryPrice), stop = num(form.stopLoss), target = num(form.target);
-    const qty = num(form.quantity), acct = num(startBalStr);
-    const totalRisk = (stop ? Math.abs(entry - stop) : 0) * qty * m;
-    const totalReward = (target ? Math.abs(target - entry) : 0) * qty * m;
+    const stop = num(form.stopLoss), target = num(form.target), acct = num(startBalStr);
+    const totalRisk = (stop ? Math.abs(entryNum - stop) : 0) * effShares * m;
+    const totalReward = (target ? Math.abs(target - entryNum) : 0) * effShares * m;
     const riskPct = acct ? (totalRisk / acct) * 100 : 0;
     const rr = totalRisk ? totalReward / totalRisk : 0;
     return { totalRisk, totalReward, riskPct, rr };
-  }, [form.entryPrice, form.stopLoss, form.target, form.quantity, startBalStr, m]);
+  }, [form.stopLoss, form.target, entryNum, effShares, startBalStr, m]);
 
   const riskTone = calc.riskPct === 0 ? "text-gray-400" : calc.riskPct <= 1 ? "text-emerald-400" : calc.riskPct <= 2 ? "text-yellow-400" : "text-red-400";
 
@@ -94,26 +98,40 @@ export default function Dashboard() {
         form.target ? "Target: " + form.target : "",
         calc.rr ? "R:R 1:" + calc.rr.toFixed(2) : "",
       ].filter(Boolean).join(" | ");
-      const res = await fetch("/api/trades", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, notes: noteExtras }),
-      });
-      if (!res.ok) throw new Error("Failed to save trade");
-      setForm(emptyForm);
+      const payload = { ...form, quantity: effShares, notes: noteExtras };
+      if (editingId) {
+        const res = await fetch("/api/trades/" + editingId, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        if (!res.ok) throw new Error("Failed to update trade");
+      } else {
+        const res = await fetch("/api/trades", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        if (!res.ok) throw new Error("Failed to save trade");
+      }
+      setForm(emptyForm); setEditingId(null); setSizeMode("shares");
       await loadTrades();
     } catch (e) { setError((e as Error).message); } finally { setLoading(false); }
   }
+
+  function editStart(t: Trade) {
+    setEditingId(t.id);
+    setSizeMode("shares");
+    setForm({
+      ticker: t.ticker, type: t.type, side: t.side,
+      quantity: String(t.quantity), entryPrice: String(t.entryPrice),
+      stopLoss: "", target: "",
+      optionType: t.optionType || "CALL",
+      strike: t.strike != null ? String(t.strike) : "",
+      expiration: "", strategy: t.strategy || "Buy & Hold", emotion: "", notes: "",
+    });
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function cancelEdit() { setEditingId(null); setForm(emptyForm); setSizeMode("shares"); }
 
   async function closeTrade(t: Trade) {
     const live = prices[t.ticker];
     const input = window.prompt("Close " + t.ticker + " — enter the price you're closing at:", live ? String(live) : "");
     if (!input) return;
-    await fetch("/api/trades/" + t.id, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ exitPrice: Number(input), status: "CLOSED" }),
-    });
+    await fetch("/api/trades/" + t.id, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ exitPrice: Number(input), status: "CLOSED" }) });
     await loadTrades();
   }
 
@@ -151,9 +169,7 @@ export default function Dashboard() {
       </header>
 
       {error && (
-        <div className="card border-red-800/60 p-4 text-sm text-red-300">
-          ⚠ {error}. This usually means the live database password in Vercel needs updating (see chat).
-        </div>
+        <div className="card border-red-800/60 p-4 text-sm text-red-300">⚠ {error}.</div>
       )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -165,14 +181,43 @@ export default function Dashboard() {
 
       <div className="grid lg:grid-cols-3 gap-6">
         <form onSubmit={submit} className="card p-6 lg:col-span-2 grid grid-cols-2 gap-4">
-          <h2 className="col-span-2 text-lg font-semibold flex items-center gap-2"><span className="text-emerald-400">▮</span> Open a Position</h2>
+          <h2 className="col-span-2 text-lg font-semibold flex items-center gap-2">
+            <span className="text-emerald-400">▮</span> {editingId ? "Edit Position" : "Open a Position"}
+            {editingId && <button type="button" onClick={cancelEdit} className="ml-auto text-xs text-gray-500 hover:text-gray-300">cancel edit</button>}
+          </h2>
           <Field label="Ticker"><input className="input uppercase" value={form.ticker} onChange={(e) => update("ticker", e.target.value)} placeholder="AAPL  (futures: ES=F)" required /></Field>
           <Field label="Type"><select className="input" value={form.type} onChange={(e) => update("type", e.target.value)}><option value="STOCK">Stock</option><option value="OPTION">Option</option><option value="FUTURE">Future</option></select></Field>
           <Field label="Side"><select className="input" value={form.side} onChange={(e) => update("side", e.target.value)}><option value="BUY">Buy / Long</option><option value="SELL">Sell / Short</option></select></Field>
-          <Field label="Quantity"><input className="input" type="number" step="any" value={form.quantity} onChange={(e) => update("quantity", e.target.value)} required /></Field>
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-gray-400">{sizeMode === "shares" ? "Quantity (shares)" : "Amount ($)"}</span>
+              <div className="flex gap-1 text-xs">
+                <button type="button" onClick={() => setSizeMode("shares")} className={"px-1.5 py-0.5 rounded " + (sizeMode === "shares" ? "bg-emerald-600" : "bg-gray-800")}>Shares</button>
+                <button type="button" onClick={() => setSizeMode("dollars")} className={"px-1.5 py-0.5 rounded " + (sizeMode === "dollars" ? "bg-emerald-600" : "bg-gray-800")}>Dollars</button>
+              </div>
+            </div>
+            <input className="input" type="number" step="any" value={form.quantity} onChange={(e) => update("quantity", e.target.value)} required />
+            {sizeMode === "dollars" && entryNum > 0 && num(form.quantity) > 0 && (
+              <p className="text-xs text-gray-500 mt-1">= {(num(form.quantity) / entryNum).toFixed(4)} shares</p>
+            )}
+          </div>
           <Field label="Entry Price"><input className="input" type="number" step="any" value={form.entryPrice} onChange={(e) => update("entryPrice", e.target.value)} required /></Field>
           <Field label="Stop Loss"><input className="input" type="number" step="any" value={form.stopLoss} onChange={(e) => update("stopLoss", e.target.value)} placeholder="optional" /></Field>
           <Field label="Target"><input className="input" type="number" step="any" value={form.target} onChange={(e) => update("target", e.target.value)} placeholder="optional" /></Field>
+          {entryNum > 0 && (
+            <div className="col-span-2 -mt-1 flex flex-wrap items-center gap-1.5 text-xs">
+              <span className="text-gray-500">Quick stop:</span>
+              {[5, 10, 15].map((p) => {
+                const px = (entryNum * (1 - p / 100)).toFixed(2);
+                return <button type="button" key={"s" + p} onClick={() => update("stopLoss", px)} className="bg-gray-800 hover:bg-red-900/50 rounded px-2 py-0.5">-{p}% (${px})</button>;
+              })}
+              <span className="text-gray-500 ml-2">Quick target:</span>
+              {[10, 20, 30].map((p) => {
+                const px = (entryNum * (1 + p / 100)).toFixed(2);
+                return <button type="button" key={"t" + p} onClick={() => update("target", px)} className="bg-gray-800 hover:bg-emerald-900/50 rounded px-2 py-0.5">+{p}% (${px})</button>;
+              })}
+            </div>
+          )}
           {isOption && (<>
             <Field label="Call / Put"><select className="input" value={form.optionType} onChange={(e) => update("optionType", e.target.value)}><option value="CALL">Call</option><option value="PUT">Put</option></select></Field>
             <Field label="Strike"><input className="input" type="number" step="any" value={form.strike} onChange={(e) => update("strike", e.target.value)} /></Field>
@@ -184,7 +229,7 @@ export default function Dashboard() {
           </div>
           <div className="col-span-2"><Field label="Notes"><textarea className="input" rows={2} value={form.notes} onChange={(e) => update("notes", e.target.value)} /></Field></div>
           <div className="col-span-2">
-            <button type="submit" disabled={loading} className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-lg px-5 py-2.5 font-medium shadow-lg shadow-emerald-900/40 transition">{loading ? "Opening..." : "Open Position"}</button>
+            <button type="submit" disabled={loading} className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-lg px-5 py-2.5 font-medium shadow-lg shadow-emerald-900/40 transition">{loading ? "Saving..." : editingId ? "Save Changes" : "Open Position"}</button>
           </div>
         </form>
 
@@ -198,15 +243,15 @@ export default function Dashboard() {
             <div className="mt-4 text-xs leading-relaxed text-gray-400 border-t border-gray-800 pt-3">
               {calc.riskPct === 0 ? "Add entry, stop loss and quantity to plan your risk."
                 : calc.riskPct <= 2 ? "✓ Risk is within the beginner-safe 1–2% range."
-                : "⚠ This risks more than 2% of your account. Consider a tighter stop or smaller size."}
+                : "⚠ This risks more than 2% of your account. Tighten the stop or shrink size."}
             </div>
           </div>
           <div className="card p-5">
             <h3 className="text-sm uppercase tracking-wide text-gray-500 mb-3">🤖 Starter Tips</h3>
             <ul className="text-sm text-gray-300 space-y-2 list-disc list-inside">
               <li>Risk only 1–2% of your account per trade.</li>
-              <li>Always set a stop loss before entering.</li>
-              <li>Aim for a Risk:Reward of 1:2 or better.</li>
+              <li>Set a stop loss before entering.</li>
+              <li>Aim for Risk:Reward of 1:2 or better.</li>
             </ul>
             <a href="/learn" className="mt-3 inline-block text-xs text-emerald-400 hover:underline">Read full strategy guide →</a>
           </div>
@@ -231,6 +276,7 @@ export default function Dashboard() {
                   <span className="text-sm font-mono text-gray-300">{price != null ? "Now: " + price.toFixed(2) : t.type === "OPTION" ? "live N/A" : "—"}</span>
                   <span className={"text-sm font-mono font-semibold " + (u == null ? "text-gray-500" : tone(u))}>{u == null ? "" : pnl(u)}</span>
                   <span className="ml-auto flex gap-2">
+                    <button onClick={() => editStart(t)} className="text-xs bg-gray-800 hover:bg-gray-700 rounded px-3 py-1">Edit</button>
                     <button onClick={() => closeTrade(t)} className="text-xs bg-gray-800 hover:bg-gray-700 rounded px-3 py-1">Close</button>
                     <button onClick={() => deleteTrade(t)} className="text-xs text-gray-500 hover:text-red-400 px-2">✕</button>
                   </span>
@@ -256,7 +302,10 @@ export default function Dashboard() {
                     <span className={"text-xs px-2 py-0.5 rounded-full " + (t.side === "BUY" ? "bg-emerald-900/50 text-emerald-300" : "bg-red-900/50 text-red-300")}>{t.side}</span>
                     <span className="text-gray-400 text-sm font-mono">{t.quantity} @ {t.entryPrice} → {t.exitPrice}</span>
                     <span className={"text-sm font-mono font-semibold " + tone(r)}>{pnl(r)}</span>
-                    <button onClick={() => deleteTrade(t)} className="ml-auto text-xs text-gray-500 hover:text-red-400 px-2">✕</button>
+                    <span className="ml-auto flex gap-2">
+                      <button onClick={() => editStart(t)} className="text-xs bg-gray-800 hover:bg-gray-700 rounded px-3 py-1">Edit</button>
+                      <button onClick={() => deleteTrade(t)} className="text-xs text-gray-500 hover:text-red-400 px-2">✕</button>
+                    </span>
                   </div>
                   {t.aiComment?.text && <p className="mt-2 text-sm text-gray-300 border-l-2 border-emerald-700 pl-3">🤖 {t.aiComment.text}</p>}
                 </div>
