@@ -15,28 +15,33 @@ export function Blobfish({ level, width = 140, caption, pct }: { level: number; 
   const uid = useId().replace(/:/g, "");
   const goo = "goo" + uid, grad = "grad" + uid;
   const P1 = "M111 34 C 58 34, 34 96, 45 128 C 56 152, 166 152, 177 128 C 188 96, 164 34, 111 34 Z";
-  const P2 = "M111 30 C 48 38, 28 100, 48 132 C 60 156, 162 156, 174 130 C 196 98, 172 30, 111 30 Z";
-  const P3 = "M111 38 C 64 30, 38 92, 42 124 C 52 150, 170 150, 180 126 C 184 92, 158 38, 111 38 Z";
+  const P2 = "M111 24 C 42 42, 20 106, 50 138 C 64 162, 158 162, 172 132 C 204 100, 180 24, 111 24 Z";
+  const P3 = "M111 42 C 68 24, 32 86, 40 122 C 50 152, 172 152, 184 124 C 190 86, 154 42, 111 42 Z";
+  const P4 = "M111 30 C 52 30, 26 100, 44 134 C 58 158, 164 158, 178 130 C 196 98, 170 30, 111 30 Z";
   return (
     <div className="flex flex-col items-center">
       <svg viewBox="0 0 222 175" width={width} className="blob-float">
         <defs>
           <filter id={goo}>
-            <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="b" />
-            <feColorMatrix in="b" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -10" result="g" />
+            <feGaussianBlur in="SourceGraphic" stdDeviation="9" result="b" />
+            <feColorMatrix in="b" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 28 -14" result="g" />
             <feBlend in="SourceGraphic" in2="g" />
           </filter>
           <linearGradient id={grad} x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor={c1}><animate attributeName="stop-color" values={c1 + ";" + c2 + ";" + c1} dur="5s" repeatCount="indefinite" /></stop>
-            <stop offset="1" stopColor={c2}><animate attributeName="stop-color" values={c2 + ";" + c1 + ";" + c2} dur="5s" repeatCount="indefinite" /></stop>
+            <stop offset="0" stopColor={c1}><animate attributeName="stop-color" values={c1 + ";" + c2 + ";" + c1} dur="4s" repeatCount="indefinite" /></stop>
+            <stop offset="1" stopColor={c2}><animate attributeName="stop-color" values={c2 + ";" + c1 + ";" + c2} dur="4s" repeatCount="indefinite" /></stop>
           </linearGradient>
         </defs>
         <g filter={"url(#" + goo + ")"}>
-          <ellipse cx="58" cy="124" rx="24" ry="12" fill={"url(#" + grad + ")"} transform="rotate(-22 58 124)" />
-          <ellipse cx="164" cy="124" rx="24" ry="12" fill={"url(#" + grad + ")"} transform="rotate(22 164 124)" />
+          <ellipse cx="56" cy="124" rx="26" ry="13" fill={"url(#" + grad + ")"} transform="rotate(-22 56 124)">
+            <animate attributeName="cx" values="56;50;56" dur="4s" repeatCount="indefinite" />
+          </ellipse>
+          <ellipse cx="166" cy="124" rx="26" ry="13" fill={"url(#" + grad + ")"} transform="rotate(22 166 124)">
+            <animate attributeName="cx" values="166;172;166" dur="4s" repeatCount="indefinite" />
+          </ellipse>
           <g transform={"translate(111,100) scale(" + fat.toFixed(3) + ",1) translate(-111,-100)"}>
             <path fill={"url(#" + grad + ")"} d={P1}>
-              <animate attributeName="d" values={P1 + ";" + P2 + ";" + P3 + ";" + P1} dur="7s" repeatCount="indefinite" />
+              <animate attributeName="d" values={P1 + ";" + P2 + ";" + P3 + ";" + P4 + ";" + P1} dur="5s" repeatCount="indefinite" />
             </path>
           </g>
         </g>

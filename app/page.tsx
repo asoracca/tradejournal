@@ -58,6 +58,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [alertsOn, setAlertsOn] = useState(false);
+  const [livePrice, setLivePrice] = useState<number | null>(null);
+  const [lookingUp, setLookingUp] = useState(false);
   const notified = useRef<Set<string>>(new Set());
 
   async function loadTrades() {
@@ -80,6 +82,21 @@ export default function Dashboard() {
       } catch { return null; }
     }));
     setPrices(Object.fromEntries(entries.filter(Boolean) as [string, number][]));
+  }
+
+  async function lookupTicker() {
+    const tk = form.ticker.trim();
+    if (!tk) { setLivePrice(null); return; }
+    setLookingUp(true);
+    try {
+      const r = await fetch("/api/quote?ticker=" + encodeURIComponent(tk));
+      if (!r.ok) { setLivePrice(null); return; }
+      const q = await r.json();
+      if (typeof q.price === "number") {
+        setLivePrice(q.price);
+        setForm((f) => ({ ...f, entryPrice: f.entryPrice ? f.entryPrice : String(q.price) }));
+      } else setLivePrice(null);
+    } catch { setLivePrice(null); } finally { setLookingUp(false); }
   }
 
   useEffect(() => { loadTrades(); }, []);
@@ -134,13 +151,13 @@ export default function Dashboard() {
         const res = await fetch("/api/trades", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
         if (!res.ok) throw new Error("Failed to save trade");
       }
-      setForm(emptyForm); setEditingId(null); setSizeMode("shares");
+      setForm(emptyForm); setEditingId(null); setSizeMode("shares"); setLivePrice(null);
       await loadTrades();
     } catch (e) { setError((e as Error).message); } finally { setLoading(false); }
   }
 
   function editStart(t: Trade) {
-    setEditingId(t.id); setSizeMode("shares");
+    setEditingId(t.id); setSizeMode("shares"); setLivePrice(null);
     setForm({
       ticker: t.ticker, type: t.type, side: t.side,
       quantity: String(t.quantity), entryPrice: String(t.entryPrice),
@@ -150,7 +167,7 @@ export default function Dashboard() {
     });
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
-  function cancelEdit() { setEditingId(null); setForm(emptyForm); setSizeMode("shares"); }
+  function cancelEdit() { setEditingId(null); setForm(emptyForm); setSizeMode("shares"); setLivePrice(null); }
 
   async function closeTrade(t: Trade) {
     const live = prices[t.ticker];
@@ -182,12 +199,12 @@ export default function Dashboard() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold gradient-text">Paper Trading Desk</h1>
-          <p className="text-gray-500 text-sm mt-1">Practice with fake money and live market prices. No real funds at risk.</p>
+          <p className="text-gray-400 text-sm mt-1">Practice with fake money and live market prices. No real funds at risk.</p>
           <a href="/learn" className="text-xs text-emerald-400 hover:underline">New to trading? Read the quick guide →</a>
         </div>
         <label className="card px-4 py-2 flex items-center gap-3">
-          <span className="text-xs uppercase tracking-wide text-gray-500">Starting Balance</span>
-          <span className="text-gray-500">$</span>
+          <span className="text-xs uppercase tracking-wide text-gray-400">Starting Balance</span>
+          <span className="text-gray-400">$</span>
           <input className="bg-transparent w-28 outline-none text-emerald-400 font-mono" value={startBalStr} onChange={(e) => setStartBalStr(e.target.value)} />
         </label>
       </header>
@@ -205,9 +222,12 @@ export default function Dashboard() {
         <form onSubmit={submit} className="card p-6 lg:col-span-2 grid grid-cols-2 gap-4">
           <h2 className="col-span-2 text-lg font-semibold flex items-center gap-2">
             <span className="text-emerald-400">▮</span> {editingId ? "Edit Position" : "Open a Position"}
-            {editingId && <button type="button" onClick={cancelEdit} className="ml-auto text-xs text-gray-500 hover:text-gray-300">cancel edit</button>}
+            {editingId && <button type="button" onClick={cancelEdit} className="ml-auto text-xs text-gray-400 hover:text-gray-200">cancel edit</button>}
           </h2>
-          <Field label="Ticker"><input className="input uppercase" value={form.ticker} onChange={(e) => update("ticker", e.target.value)} placeholder="AAPL  (futures: ES=F)" required /></Field>
+          <div>
+            <Field label="Ticker"><input className="input uppercase" value={form.ticker} onChange={(e) => { update("ticker", e.target.value); setLivePrice(null); }} onBlur={lookupTicker} placeholder="AAPL  (futures: ES=F)" required /></Field>
+            {lookingUp && <p className="text-xs text-pink-300 mt-1">fetching price…</p>}
+          </div>
           <Field label="Type"><select className="input" value={form.type} onChange={(e) => update("type", e.target.value)}><option value="STOCK">Stock</option><option value="OPTION">Option</option><option value="FUTURE">Future</option></select></Field>
           <Field label="Side"><select className="input" value={form.side} onChange={(e) => update("side", e.target.value)}><option value="BUY">Buy / Long</option><option value="SELL">Sell / Short</option></select></Field>
           <div>
@@ -219,16 +239,19 @@ export default function Dashboard() {
               </div>
             </div>
             <input className="input" type="number" step="any" value={form.quantity} onChange={(e) => update("quantity", e.target.value)} required />
-            {sizeMode === "dollars" && entryNum > 0 && num(form.quantity) > 0 && (<p className="text-xs text-gray-500 mt-1">= {(num(form.quantity) / entryNum).toFixed(4)} shares</p>)}
+            {sizeMode === "dollars" && entryNum > 0 && num(form.quantity) > 0 && (<p className="text-xs text-gray-400 mt-1">= {(num(form.quantity) / entryNum).toFixed(4)} shares</p>)}
           </div>
-          <Field label="Entry Price"><input className="input" type="number" step="any" value={form.entryPrice} onChange={(e) => update("entryPrice", e.target.value)} required /></Field>
+          <div>
+            <Field label="Entry Price"><input className="input" type="number" step="any" value={form.entryPrice} onChange={(e) => update("entryPrice", e.target.value)} required /></Field>
+            {livePrice != null && <button type="button" onClick={() => update("entryPrice", livePrice.toFixed(2))} className="text-xs text-pink-300 hover:underline mt-1">↻ live ${livePrice.toFixed(2)}</button>}
+          </div>
           <Field label="Stop Loss"><input className="input" type="number" step="any" value={form.stopLoss} onChange={(e) => update("stopLoss", e.target.value)} placeholder="optional" /></Field>
           <Field label="Target"><input className="input" type="number" step="any" value={form.target} onChange={(e) => update("target", e.target.value)} placeholder="optional" /></Field>
           {entryNum > 0 && (
             <div className="col-span-2 -mt-1 flex flex-wrap items-center gap-1.5 text-xs">
-              <span className="text-gray-500">Quick stop:</span>
+              <span className="text-gray-400">Quick stop:</span>
               {[5, 10, 15].map((p) => { const px = (entryNum * (1 - p / 100)).toFixed(2); return <button type="button" key={"s" + p} onClick={() => update("stopLoss", px)} className="bg-gray-800 hover:bg-red-900/50 rounded px-2 py-0.5">-{p}% (${px})</button>; })}
-              <span className="text-gray-500 ml-2">Quick target:</span>
+              <span className="text-gray-400 ml-2">Quick target:</span>
               {[10, 20, 30].map((p) => { const px = (entryNum * (1 + p / 100)).toFixed(2); return <button type="button" key={"t" + p} onClick={() => update("target", px)} className="bg-gray-800 hover:bg-emerald-900/50 rounded px-2 py-0.5">+{p}% (${px})</button>; })}
             </div>
           )}
@@ -239,7 +262,7 @@ export default function Dashboard() {
           </>)}
           <div className="col-span-2">
             <Field label="Strategy"><select className="input" value={form.strategy} onChange={(e) => update("strategy", e.target.value)}>{STRATEGIES.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}</select></Field>
-            <p className="text-xs text-gray-500 mt-1">{stratDesc}</p>
+            <p className="text-xs text-gray-400 mt-1">{stratDesc}</p>
           </div>
           <div className="col-span-2"><Field label="Notes"><textarea className="input" rows={2} value={form.notes} onChange={(e) => update("notes", e.target.value)} /></Field></div>
           <div className="col-span-2">
@@ -249,7 +272,7 @@ export default function Dashboard() {
 
         <div className="space-y-6">
           <div className="card p-5">
-            <h3 className="text-sm uppercase tracking-wide text-gray-500 mb-2">Risk Meter</h3>
+            <h3 className="text-sm uppercase tracking-wide text-gray-400 mb-2">Risk Meter</h3>
             <div className="mb-4"><Blobfish level={calc.riskPct} pct={calc.riskPct} /></div>
             <Metric label="Risk on this trade" value={calc.totalRisk ? "$" + calc.totalRisk.toFixed(2) : "—"} tone={riskTone} />
             <Metric label="% of account" value={calc.riskPct ? calc.riskPct.toFixed(2) + "%" : "—"} tone={riskTone} />
@@ -265,7 +288,7 @@ export default function Dashboard() {
           {!alertsOn && <button onClick={enableAlerts} className="text-xs bg-gray-800 hover:bg-gray-700 rounded px-3 py-1">🔔 Enable alerts</button>}
         </div>
         {open.length === 0 ? (
-          <p className="text-gray-500">No open positions. Open one above.</p>
+          <p className="text-gray-400">No open positions. Open one above.</p>
         ) : (
           <div className="space-y-3">
             {open.map((t) => {
@@ -288,7 +311,7 @@ export default function Dashboard() {
                       <button onClick={(e) => { e.stopPropagation(); deleteTrade(t); }} className="text-xs text-gray-500 hover:text-red-400 px-2">✕</button>
                     </span>
                   </div>
-                  <div className="mt-1 text-xs text-gray-600">🕒 {fmtDate(t.createdAt)}{t.stopLoss != null ? " · stop " + t.stopLoss : ""}{t.target != null ? " · target " + t.target : ""} · tap for details →</div>
+                  <div className="mt-1 text-xs text-gray-500">🕒 {fmtDate(t.createdAt)}{t.stopLoss != null ? " · stop " + t.stopLoss : ""}{t.target != null ? " · target " + t.target : ""} · tap for details →</div>
                   {t.aiComment?.text && <p className="mt-2 text-sm text-gray-300 border-l-2 border-emerald-700 pl-3">🤖 {t.aiComment.text}</p>}
                 </div>
               );
@@ -300,7 +323,7 @@ export default function Dashboard() {
       <section>
         <h2 className="text-xl font-bold mb-4">Trade History</h2>
         {closed.length === 0 ? (
-          <p className="text-gray-500">No closed trades yet.</p>
+          <p className="text-gray-400">No closed trades yet.</p>
         ) : (
           <div className="space-y-3">
             {closed.map((t) => {
@@ -317,7 +340,7 @@ export default function Dashboard() {
                       <button onClick={(e) => { e.stopPropagation(); deleteTrade(t); }} className="text-xs text-gray-500 hover:text-red-400 px-2">✕</button>
                     </span>
                   </div>
-                  <div className="mt-1 text-xs text-gray-600">🕒 {fmtDate(t.createdAt)} · tap for details →</div>
+                  <div className="mt-1 text-xs text-gray-500">🕒 {fmtDate(t.createdAt)} · tap for details →</div>
                   {t.aiComment?.text && <p className="mt-2 text-sm text-gray-300 border-l-2 border-emerald-700 pl-3">🤖 {t.aiComment.text}</p>}
                 </div>
               );
@@ -333,7 +356,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   return (<label className="block"><span className="block text-xs text-gray-400 mb-1">{label}</span>{children}</label>);
 }
 function Stat({ label, value, accent }: { label: string; value: string; accent?: string }) {
-  return (<div className="stat"><div className="text-xs uppercase tracking-wide text-gray-500">{label}</div><div className={"text-2xl font-bold font-mono mt-1 " + (accent || "text-gray-100")}>{value}</div></div>);
+  return (<div className="stat"><div className="text-xs uppercase tracking-wide text-gray-400">{label}</div><div className={"text-2xl font-bold font-mono mt-1 " + (accent || "text-gray-100")}>{value}</div></div>);
 }
 function Metric({ label, value, tone }: { label: string; value: string; tone: string }) {
   return (<div className="flex items-center justify-between py-1.5"><span className="text-sm text-gray-400">{label}</span><span className={"font-mono font-semibold " + tone}>{value}</span></div>);
