@@ -11,10 +11,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className="text-pink-50 min-h-screen">
-        <nav className="sticky top-0 z-10 border-b border-pink-900/30 bg-[#140a14]/70 backdrop-blur px-6 py-4 flex gap-6 items-center">
+        <nav className="sticky top-0 z-10 border-b border-pink-900/30 bg-[#140a14]/70 backdrop-blur px-6 py-4 flex gap-5 items-center flex-wrap">
           <span className="font-bold text-lg">🫧 <span className="gradient-text">TradeGoons</span></span>
           <Link href="/" className="text-sm text-pink-100/80 hover:text-pink-300">Dashboard</Link>
           <Link href="/trades" className="text-sm text-pink-100/80 hover:text-pink-300">Trades</Link>
+          <Link href="/review" className="text-sm text-pink-100/80 hover:text-pink-300">AI Review</Link>
           <Link href="/scan" className="text-sm text-pink-100/80 hover:text-pink-300">Scan</Link>
           <Link href="/options" className="text-sm text-pink-100/80 hover:text-pink-300">Options</Link>
           <Link href="/learn" className="text-sm text-pink-100/80 hover:text-pink-300">Learn</Link>
