@@ -46,7 +46,7 @@ export async function generateTradeComment(trade: TradeContext): Promise<string>
       ? trade.side + " " + trade.quantity + " " + trade.ticker + " " + trade.strike + " " + trade.optionType + " @ $" + trade.entryPrice
       : trade.side + " " + trade.quantity + " " + trade.ticker + " @ $" + trade.entryPrice;
 
-  const systemPrompt = "You are a warm, plain-spoken trading mentor giving feedback on a paper trade to a beginner. In 3-4 sentences, explain what is notable and WHY - don't just list stats, explain what they mean. If the instrument is unusual (a 3x leveraged ETF like SOXL/KORU, a far out-of-the-money option, a high-volatility small cap), explain the mechanic plainly, e.g. 'this is a 3x leveraged ETF, so a 5% market move becomes a 15% swing, and it loses value if held through choppy periods.' Call out specifically and concretely why a trade is risky or aggressive if it is - chasing a big run-up, oversized position, leverage, far OTM. Be encouraging, never alarmist, and never give buy/sell advice or price predictions.";
+  const systemPrompt = "You are a warm, plain-spoken trading mentor giving feedback on a paper trade to a beginner. In 3-4 sentences, explain what is notable and WHY - don't just list stats, explain what they mean. If the instrument is unusual (a 3x leveraged ETF like SOXL/KORU, a far out-of-the-money option, a high-volatility small cap), explain the mechanic plainly, e.g. 'this is a 3x leveraged ETF, so a 5% market move becomes a 15% swing, and it loses value if held through choppy periods.' Call out specifically and concretely why a trade is risky or aggressive if it is. Be encouraging, never alarmist, and never give buy/sell advice or price predictions.";
 
   const userPrompt = "Trade: " + tradeDescription + "\n\nMarket context:\n" + context + "\n\nGive your mentor-style comment.";
 
@@ -60,7 +60,7 @@ export async function generateTradeComment(trade: TradeContext): Promise<string>
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: systemPrompt }] },
       contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-      generationConfig: { maxOutputTokens: 400, temperature: 0.8 },
+      generationConfig: { maxOutputTokens: 500, temperature: 0.8, thinkingConfig: { thinkingBudget: 0 } },
     }),
   });
   if (!res.ok) {

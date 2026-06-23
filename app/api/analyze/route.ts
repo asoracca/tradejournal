@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: systemPrompt }] },
       contents: [{ role: "user", parts: [{ text: String(summary || "") }] }],
-      generationConfig: { maxOutputTokens: 600, temperature: 0.8 },
+      generationConfig: { maxOutputTokens: 800, temperature: 0.8, thinkingConfig: { thinkingBudget: 0 } },
     }),
   });
   if (!res.ok) { const t = await res.text(); return NextResponse.json({ analysis: "Analysis unavailable: " + t.slice(0, 150) }); }
