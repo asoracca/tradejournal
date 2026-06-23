@@ -10,13 +10,9 @@ function resizeImage(file: File): Promise<{ base64: string; dataUrl: string }> {
     reader.onload = () => {
       const img = new Image();
       img.onload = () => {
-        const maxDim = 1400;
+        const maxDim = 1500;
         let width = img.width, height = img.height;
-        if (width > maxDim || height > maxDim) {
-          const scale = maxDim / Math.max(width, height);
-          width = Math.round(width * scale);
-          height = Math.round(height * scale);
-        }
+        if (width > maxDim || height > maxDim) { const s = maxDim / Math.max(width, height); width = Math.round(width * s); height = Math.round(height * s); }
         const canvas = document.createElement("canvas");
         canvas.width = width; canvas.height = height;
         const ctx = canvas.getContext("2d");
@@ -33,25 +29,48 @@ function resizeImage(file: File): Promise<{ base64: string; dataUrl: string }> {
   });
 }
 
+function readBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve((r.result as string).split(",")[1]);
+    r.onerror = () => reject(new Error("Could not read file"));
+    r.readAsDataURL(file);
+  });
+}
+
 export default function ScanPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [positions, setPositions] = useState<Pos[]>([]);
   const [preview, setPreview] = useState<string | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
   const [added, setAdded] = useState(0);
 
   async function handleFile(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setError(null); setAdded(0); setPositions([]); setBusy(true);
+    setError(null); setAdded(0); setPositions([]); setPreview(null); setFileName(null); setBusy(true);
     try {
-      const { base64, dataUrl } = await resizeImage(file);
-      setPreview(dataUrl);
-      const res = await fetch("/api/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ imageBase64: base64, mimeType: "image/jpeg" }) });
+      const name = file.name.toLowerCase();
+      let payload: Record<string, unknown>;
+      if (file.type.startsWith("image/")) {
+        const { base64, dataUrl } = await resizeImage(file);
+        setPreview(dataUrl);
+        payload = { imageBase64: base64, mimeType: "image/jpeg" };
+      } else if (file.type === "application/pdf" || name.endsWith(".pdf")) {
+        setFileName(file.name);
+        payload = { imageBase64: await readBase64(file), mimeType: "application/pdf" };
+      } else if (name.endsWith(".csv") || name.endsWith(".txt") || file.type.includes("csv") || file.type.startsWith("text/")) {
+        setFileName(file.name);
+        payload = { text: await file.text() };
+      } else {
+        throw new Error("Unsupported file type. Upload an image, PDF, or CSV.");
+      }
+      const res = await fetch("/api/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Scan failed");
       setPositions(Array.isArray(data.positions) ? data.positions : []);
-      if (!data.positions || data.positions.length === 0) setError("Couldn't read any positions. Try a clearer, closer photo.");
+      if (!data.positions || data.positions.length === 0) setError("Couldn't read any positions from that file. For a PDF use the holdings page; for a screenshot make it clear and close.");
     } catch (err) { setError((err as Error).message); }
     finally { setBusy(false); }
   }
@@ -66,7 +85,7 @@ export default function ScanPage() {
     let count = 0;
     try {
       for (const p of positions) {
-        const res = await fetch("/api/trades", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...p, strategy: "Imported", notes: "Imported from photo" }) });
+        const res = await fetch("/api/trades", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...p, strategy: "Imported", notes: "Imported from file" }) });
         if (res.ok) count++;
       }
       setAdded(count); setPositions([]);
@@ -78,18 +97,19 @@ export default function ScanPage() {
     <div className="max-w-3xl mx-auto space-y-6">
       <header>
         <h1 className="text-3xl font-bold gradient-text">Scan &amp; Import</h1>
-        <p className="text-gray-500 text-sm mt-1">Photograph a trade confirmation or your brokerage holdings screen — the AI reads it and logs the positions.</p>
+        <p className="text-gray-400 text-sm mt-1">Upload a screenshot, a PDF statement, or a CSV export — the AI reads it and logs your positions.</p>
       </header>
 
       <div className="card p-6">
         <label className="block">
-          <span className="text-sm text-gray-300">Upload or take a photo</span>
-          <input type="file" accept="image/*" capture="environment" onChange={handleFile} disabled={busy}
+          <span className="text-sm text-gray-200">Upload a photo, PDF, or CSV</span>
+          <input type="file" accept="image/*,.pdf,.csv,.txt" onChange={handleFile} disabled={busy}
             className="mt-2 block w-full text-sm text-gray-400 file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-600 file:px-4 file:py-2 file:text-white hover:file:bg-emerald-500" />
         </label>
-        {busy && <p className="text-emerald-400 text-sm mt-3">Reading image…</p>}
+        {busy && <p className="text-pink-300 text-sm mt-3">Reading file…</p>}
         {error && <p className="text-red-400 text-sm mt-3">⚠ {error}</p>}
         {preview && <img src={preview} alt="preview" className="mt-4 max-h-48 rounded-lg border border-gray-800" />}
+        {fileName && !preview && <p className="mt-3 text-sm text-gray-300">📄 {fileName}</p>}
       </div>
 
       {added > 0 && <div className="card p-4 text-emerald-300 text-sm">✓ Added {added} position(s) to your journal. Check the Dashboard.</div>}
@@ -97,7 +117,7 @@ export default function ScanPage() {
       {positions.length > 0 && (
         <div className="card p-6 space-y-4">
           <h2 className="font-semibold">Review before adding</h2>
-          <p className="text-xs text-gray-500">Check each row against your photo and fix anything the AI misread.</p>
+          <p className="text-xs text-gray-400">Check each row against your file and fix anything the AI misread.</p>
           <div className="space-y-2">
             {positions.map((p, i) => (
               <div key={i} className="grid grid-cols-12 gap-2 items-center">

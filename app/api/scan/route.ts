@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
-  const { imageBase64, mimeType } = await req.json();
+  const { imageBase64, mimeType, text } = await req.json();
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY not set in Vercel" }, { status: 400 });
-  if (!imageBase64) return NextResponse.json({ error: "No image provided" }, { status: 400 });
+  if (!imageBase64 && !text) return NextResponse.json({ error: "No file provided" }, { status: 400 });
 
   const prompt =
-    "This image is a brokerage trade confirmation or a portfolio/holdings screen. " +
+    "This is a brokerage trade confirmation, holdings/portfolio screen, account statement, or a CSV export. " +
     "Extract every position you can clearly identify. For each: ticker symbol (uppercase), " +
     "type (STOCK, OPTION, or FUTURE), side (BUY for holdings or long, SELL for short), " +
     "quantity (shares or contracts), and entryPrice (average cost or price per share/contract). " +
-    "If it is a holdings screenshot, side is BUY and entryPrice is the average cost. " +
+    "If it is a holdings list, side is BUY and entryPrice is the average cost / cost basis per share. " +
     "Only include rows you are confident about. If you cannot read it, return an empty list.";
 
   const schema = {
@@ -35,16 +35,17 @@ export async function POST(req: NextRequest) {
     required: ["positions"],
   };
 
+  const parts = text
+    ? [{ text: prompt + "\n\nFile contents:\n" + String(text).slice(0, 20000) }]
+    : [{ text: prompt }, { inlineData: { mimeType: mimeType || "image/jpeg", data: imageBase64 } }];
+
   const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + apiKey;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      contents: [{ role: "user", parts: [
-        { text: prompt },
-        { inlineData: { mimeType: mimeType || "image/jpeg", data: imageBase64 } },
-      ] }],
-      generationConfig: { responseMimeType: "application/json", responseSchema: schema, maxOutputTokens: 2000 },
+      contents: [{ role: "user", parts }],
+      generationConfig: { responseMimeType: "application/json", responseSchema: schema, maxOutputTokens: 4000, thinkingConfig: { thinkingBudget: 0 } },
     }),
   });
 
@@ -54,9 +55,9 @@ export async function POST(req: NextRequest) {
   }
 
   const data = await res.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+  const out = data?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
   let parsed: { positions?: Array<Record<string, unknown>> } = {};
-  try { parsed = JSON.parse(text); } catch { parsed = { positions: [] }; }
+  try { parsed = JSON.parse(out); } catch { parsed = { positions: [] }; }
 
   const positions = (parsed.positions || []).map((p) => ({
     ticker: String(p.ticker || "").toUpperCase(),
