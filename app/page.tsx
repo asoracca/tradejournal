@@ -9,10 +9,20 @@ type Trade = {
   aiComment?: { text: string } | null;
 };
 
+const STRATEGIES: { name: string; desc: string }[] = [
+  { name: "Buy & Hold", desc: "Hold for the long term and ride out short-term swings. Lowest stress." },
+  { name: "Swing Trade", desc: "Hold days to weeks to catch a single price swing." },
+  { name: "Momentum", desc: "Buy strength — assets already moving up on high volume." },
+  { name: "Breakout", desc: "Enter as price breaks above resistance or below support." },
+  { name: "Mean Reversion", desc: "Bet an overstretched price snaps back to its average." },
+  { name: "Dividend / Income", desc: "Hold mainly to collect regular dividend payments." },
+  { name: "Day Trade", desc: "Open and close same day. Fast and risky — advanced." },
+];
+
 const emptyForm = {
   ticker: "", type: "STOCK", side: "BUY", quantity: "", entryPrice: "",
   stopLoss: "", target: "", optionType: "CALL", strike: "", expiration: "",
-  strategy: "", emotion: "", notes: "",
+  strategy: "Buy & Hold", emotion: "", notes: "",
 };
 
 function num(v: string): number { const n = parseFloat(v); return isNaN(n) ? 0 : n; }
@@ -89,6 +99,7 @@ export default function Dashboard() {
 
   const isOption = form.type === "OPTION";
   const maxRisk = num(accountSize) * 0.02;
+  const stratDesc = STRATEGIES.find((s) => s.name === form.strategy)?.desc;
 
   return (
     <div className="space-y-8 max-w-6xl mx-auto">
@@ -96,6 +107,7 @@ export default function Dashboard() {
         <div>
           <h1 className="text-3xl font-bold gradient-text">Trading Dashboard</h1>
           <p className="text-gray-500 text-sm mt-1">Plan every trade. Know your risk before you enter.</p>
+          <a href="/learn" className="text-xs text-emerald-400 hover:underline">New to trading? Read the quick guide →</a>
         </div>
         <label className="card px-4 py-2 flex items-center gap-3">
           <span className="text-xs uppercase tracking-wide text-gray-500">Account Size</span>
@@ -132,8 +144,11 @@ export default function Dashboard() {
             <Field label="Strike"><input className="input" type="number" step="any" value={form.strike} onChange={(e) => update("strike", e.target.value)} /></Field>
             <Field label="Expiration"><input className="input" type="date" value={form.expiration} onChange={(e) => update("expiration", e.target.value)} /></Field>
           </>)}
-          <Field label="Strategy"><input className="input" value={form.strategy} onChange={(e) => update("strategy", e.target.value)} placeholder="breakout, momentum..." /></Field>
-          <Field label="Emotion"><input className="input" value={form.emotion} onChange={(e) => update("emotion", e.target.value)} placeholder="calm, fomo..." /></Field>
+          <div className="col-span-2">
+            <Field label="Strategy"><select className="input" value={form.strategy} onChange={(e) => update("strategy", e.target.value)}>{STRATEGIES.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}</select></Field>
+            <p className="text-xs text-gray-500 mt-1">{stratDesc}</p>
+          </div>
+          <div className="col-span-2"><Field label="Emotion"><input className="input" value={form.emotion} onChange={(e) => update("emotion", e.target.value)} placeholder="calm, fomo..." /></Field></div>
           <div className="col-span-2"><Field label="Notes"><textarea className="input" rows={2} value={form.notes} onChange={(e) => update("notes", e.target.value)} /></Field></div>
           <div className="col-span-2 flex items-center gap-3 flex-wrap">
             <button type="submit" disabled={loading} className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-lg px-5 py-2.5 font-medium shadow-lg shadow-emerald-900/40 transition">{loading ? "Saving..." : "Add Trade"}</button>
@@ -163,7 +178,7 @@ export default function Dashboard() {
               <li>Aim for a Risk:Reward of 1:2 or better.</li>
               <li>Write down your reason — review it later.</li>
             </ul>
-            <p className="mt-3 text-xs text-gray-500">Per-trade AI coaching turns on once your Anthropic key is added.</p>
+            <a href="/learn" className="mt-3 inline-block text-xs text-emerald-400 hover:underline">Read full strategy guide →</a>
           </div>
         </div>
       </div>
