@@ -7,11 +7,7 @@ export const metadata: Metadata = {
   description: "Paper trading with AI commentary and a Congress comparison.",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body className="bg-gray-950 text-gray-100 min-h-screen">
