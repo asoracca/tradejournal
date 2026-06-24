@@ -66,7 +66,7 @@ export default function Dashboard() {
   const [lookingUp, setLookingUp] = useState(false);
   const notified = useRef<Set<string>>(new Set());
 
-  useEffect(() => { try { const v = localStorage.getItem("tg_layout"); if (v === "boxes" || v === "strips") setLayout(v); } catch {} }, []);
+  useEffect(() => { try { const v = localStorage.getItem("tg_layout"); if (v === "boxes" || v === "strips") setLayout(v); const vw = localStorage.getItem("tg_view"); if (vw === "REAL" || vw === "PAPER") { setView(vw); setMode(vw); } } catch {} }, []);
   function chooseLayout(l: "strips" | "boxes") { setLayout(l); try { localStorage.setItem("tg_layout", l); } catch {} }
 
   async function loadTrades() {
@@ -109,7 +109,7 @@ export default function Dashboard() {
   }
 
   useEffect(() => { loadTrades(); }, []);
-  useEffect(() => { try { localStorage.setItem("tg_theme", view); document.documentElement.setAttribute("data-theme", view); } catch {} }, [view]);
+  useEffect(() => { try { localStorage.setItem("tg_theme", view); localStorage.setItem("tg_view", view); document.documentElement.setAttribute("data-theme", view); } catch {} }, [view]);
   useEffect(() => {
     const syms = Array.from(new Set(trades.filter((t) => t.status === "OPEN" && t.type !== "OPTION").map((t) => t.ticker)));
     if (syms.length) loadPrices(syms);
