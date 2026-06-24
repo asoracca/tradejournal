@@ -20,6 +20,7 @@ model Trade {
   stopLoss      Float?
   target        Float?
   status        String     @default("OPEN")
+  mode          String     @default("PAPER")
   optionType    String?
   strike        Float?
   expiration    String?
@@ -46,4 +47,12 @@ model CongressTrade {
   type            String
   amountLow       Float?
   amountHigh      Float?
+}
+
+model Asset {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  name      String
+  category  String
+  value     Float
 }

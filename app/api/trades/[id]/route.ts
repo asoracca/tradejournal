@@ -20,6 +20,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (body.exitPrice !== undefined) data.exitPrice = numOrNull(body.exitPrice);
   if (body.stopLoss !== undefined) data.stopLoss = numOrNull(body.stopLoss);
   if (body.target !== undefined) data.target = numOrNull(body.target);
+  if (body.mode !== undefined) data.mode = body.mode === "REAL" ? "REAL" : "PAPER";
   if (body.status !== undefined) data.status = body.status;
   if (body.optionType !== undefined) data.optionType = body.optionType || null;
   if (body.strike !== undefined) data.strike = body.strike ? Number(body.strike) : null;

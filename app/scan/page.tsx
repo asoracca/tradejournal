@@ -85,7 +85,7 @@ export default function ScanPage() {
     let count = 0;
     try {
       for (const p of positions) {
-        const res = await fetch("/api/trades", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...p, strategy: "Imported", notes: "Imported from file" }) });
+        const res = await fetch("/api/trades", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...p, mode: "REAL", strategy: "Imported", notes: "Imported from file" }) });
         if (res.ok) count++;
       }
       setAdded(count); setPositions([]);

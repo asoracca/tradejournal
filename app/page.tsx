@@ -6,7 +6,7 @@ import { Blobfish } from "./blobfish";
 
 type Trade = {
   id: string; createdAt: string; ticker: string; type: string; side: string;
-  quantity: number; entryPrice: number; exitPrice: number | null; status: string;
+  quantity: number; entryPrice: number; exitPrice: number | null; status: string; mode: string;
   stopLoss: number | null; target: number | null;
   optionType: string | null; strike: number | null; strategy: string | null; notes: string | null;
   aiComment?: { text: string } | null;
@@ -29,15 +29,14 @@ const emptyForm = {
 };
 
 function num(v: string): number { const n = parseFloat(v); return isNaN(n) ? 0 : n; }
-function mult(t: Trade): number { return t.type === "OPTION" ? 100 : 1; }
+function mlt(t: Trade): number { return t.type === "OPTION" ? 100 : 1; }
 function dir(t: Trade): number { return t.side === "BUY" ? 1 : -1; }
-function realized(t: Trade): number { return t.exitPrice != null ? (t.exitPrice - t.entryPrice) * t.quantity * mult(t) * dir(t) : 0; }
-function unreal(t: Trade, price?: number): number | null { return price != null ? (price - t.entryPrice) * t.quantity * mult(t) * dir(t) : null; }
+function realized(t: Trade): number { return t.exitPrice != null ? (t.exitPrice - t.entryPrice) * t.quantity * mlt(t) * dir(t) : 0; }
+function unreal(t: Trade, price?: number): number | null { return price != null ? (price - t.entryPrice) * t.quantity * mlt(t) * dir(t) : null; }
 function pnlStr(n: number): string { return (n >= 0 ? "+$" : "-$") + Math.abs(n).toFixed(2); }
 function tone(n: number): string { return n > 0 ? "text-emerald-400" : n < 0 ? "text-red-400" : "text-gray-300"; }
 function fmtDate(s: string): string {
-  try { return new Date(s).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }); }
-  catch { return s; }
+  try { return new Date(s).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }); } catch { return s; }
 }
 function hitStatus(t: Trade, price?: number): "STOP" | "TARGET" | null {
   if (price == null) return null;
@@ -52,6 +51,8 @@ export default function Dashboard() {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [prices, setPrices] = useState<Record<string, number>>({});
   const [form, setForm] = useState(emptyForm);
+  const [mode, setMode] = useState<"PAPER" | "REAL">("PAPER");
+  const [view, setView] = useState<"PAPER" | "REAL">("PAPER");
   const [sizeMode, setSizeMode] = useState<"shares" | "dollars">("shares");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [startBalStr, setStartBalStr] = useState("100000");
@@ -81,7 +82,7 @@ export default function Dashboard() {
         return typeof q.price === "number" ? ([s, q.price] as [string, number]) : null;
       } catch { return null; }
     }));
-    setPrices(Object.fromEntries(entries.filter(Boolean) as [string, number][]));
+    setPrices((prev) => ({ ...prev, ...Object.fromEntries(entries.filter(Boolean) as [string, number][]) }));
   }
 
   async function lookupTicker() {
@@ -92,10 +93,8 @@ export default function Dashboard() {
       const r = await fetch("/api/quote?ticker=" + encodeURIComponent(tk));
       if (!r.ok) { setLivePrice(null); return; }
       const q = await r.json();
-      if (typeof q.price === "number") {
-        setLivePrice(q.price);
-        setForm((f) => ({ ...f, entryPrice: f.entryPrice ? f.entryPrice : String(q.price) }));
-      } else setLivePrice(null);
+      if (typeof q.price === "number") { setLivePrice(q.price); setForm((f) => ({ ...f, entryPrice: f.entryPrice ? f.entryPrice : String(q.price) })); }
+      else setLivePrice(null);
     } catch { setLivePrice(null); } finally { setLookingUp(false); }
   }
 
@@ -143,7 +142,7 @@ export default function Dashboard() {
     setLoading(true); setError(null);
     try {
       const noteExtras = [form.notes, calc.rr ? "R:R 1:" + calc.rr.toFixed(2) : ""].filter(Boolean).join(" | ");
-      const payload = { ...form, quantity: effShares, stopLoss: form.stopLoss, target: form.target, notes: noteExtras };
+      const payload = { ...form, quantity: effShares, stopLoss: form.stopLoss, target: form.target, notes: noteExtras, mode };
       if (editingId) {
         const res = await fetch("/api/trades/" + editingId, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
         if (!res.ok) throw new Error("Failed to update trade");
@@ -157,17 +156,16 @@ export default function Dashboard() {
   }
 
   function editStart(t: Trade) {
-    setEditingId(t.id); setSizeMode("shares"); setLivePrice(null);
+    setEditingId(t.id); setSizeMode("shares"); setLivePrice(null); setMode(t.mode === "REAL" ? "REAL" : "PAPER");
     setForm({
-      ticker: t.ticker, type: t.type, side: t.side,
-      quantity: String(t.quantity), entryPrice: String(t.entryPrice),
+      ticker: t.ticker, type: t.type, side: t.side, quantity: String(t.quantity), entryPrice: String(t.entryPrice),
       stopLoss: t.stopLoss != null ? String(t.stopLoss) : "", target: t.target != null ? String(t.target) : "",
       optionType: t.optionType || "CALL", strike: t.strike != null ? String(t.strike) : "", expiration: "",
       strategy: t.strategy || "Buy & Hold", emotion: "", notes: "",
     });
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
-  function cancelEdit() { setEditingId(null); setForm(emptyForm); setSizeMode("shares"); setLivePrice(null); }
+  function cancelEdit() { setEditingId(null); setForm(emptyForm); setSizeMode("shares"); setLivePrice(null); setMode(view); }
 
   async function closeTrade(t: Trade) {
     const live = prices[t.ticker];
@@ -182,14 +180,18 @@ export default function Dashboard() {
     await loadTrades();
   }
 
-  const open = trades.filter((t) => t.status === "OPEN");
-  const closed = trades.filter((t) => t.status !== "OPEN");
+  const isReal = (t: Trade) => t.mode === "REAL";
+  const inView = trades.filter((t) => (view === "REAL" ? isReal(t) : !isReal(t)));
+  const open = inView.filter((t) => t.status === "OPEN");
+  const closed = inView.filter((t) => t.status !== "OPEN");
   const startBal = num(startBalStr);
   const realizedTotal = closed.reduce((a, t) => a + realized(t), 0);
   const openTotal = open.reduce((a, t) => a + (unreal(t, prices[t.ticker]) ?? 0), 0);
   const equity = startBal + realizedTotal + openTotal;
   const wins = closed.filter((t) => realized(t) > 0).length;
   const winRate = closed.length ? Math.round((wins / closed.length) * 100) : 0;
+  const costBasis = open.reduce((a, t) => a + t.entryPrice * t.quantity * mlt(t), 0);
+  const marketValue = open.reduce((a, t) => { const p = prices[t.ticker]; return a + (p != null ? p : t.entryPrice) * t.quantity * mlt(t); }, 0);
 
   const isOption = form.type === "OPTION";
   const stratDesc = STRATEGIES.find((s) => s.name === form.strategy)?.desc;
@@ -198,24 +200,39 @@ export default function Dashboard() {
     <div className="space-y-8 max-w-6xl mx-auto">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold gradient-text">Paper Trading Desk</h1>
-          <p className="text-gray-400 text-sm mt-1">Practice with fake money and live market prices. No real funds at risk.</p>
+          <h1 className="text-3xl font-bold gradient-text">{view === "REAL" ? "Real Portfolio" : "Paper Trading Desk"}</h1>
+          <p className="text-gray-400 text-sm mt-1">{view === "REAL" ? "Your real holdings (delayed prices — Schwab is the source of truth)." : "Practice with fake money and live market prices."}</p>
           <a href="/learn" className="text-xs text-emerald-400 hover:underline">New to trading? Read the quick guide →</a>
         </div>
-        <label className="card px-4 py-2 flex items-center gap-3">
-          <span className="text-xs uppercase tracking-wide text-gray-400">Starting Balance</span>
-          <span className="text-gray-400">$</span>
-          <input className="bg-transparent w-28 outline-none text-emerald-400 font-mono" value={startBalStr} onChange={(e) => setStartBalStr(e.target.value)} />
-        </label>
+        <div className="flex flex-col items-end gap-2">
+          <div className="card p-1 flex gap-1">
+            <button onClick={() => { setView("PAPER"); setMode("PAPER"); }} className={"px-3 py-1.5 rounded-lg text-sm " + (view === "PAPER" ? "bg-emerald-600" : "")}>📝 Paper</button>
+            <button onClick={() => { setView("REAL"); setMode("REAL"); }} className={"px-3 py-1.5 rounded-lg text-sm " + (view === "REAL" ? "bg-pink-600" : "")}>💵 Real</button>
+          </div>
+          {view === "PAPER" && (
+            <label className="card px-4 py-2 flex items-center gap-3">
+              <span className="text-xs uppercase tracking-wide text-gray-400">Starting Balance</span>
+              <span className="text-gray-400">$</span>
+              <input className="bg-transparent w-24 outline-none text-emerald-400 font-mono" value={startBalStr} onChange={(e) => setStartBalStr(e.target.value)} />
+            </label>
+          )}
+        </div>
       </header>
 
       {error && <div className="card border-red-800/60 p-4 text-sm text-red-300">⚠ {error}.</div>}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Stat label="Account Equity" value={"$" + equity.toFixed(0)} accent={tone(equity - startBal)} />
-        <Stat label="Realized P&L" value={pnlStr(realizedTotal)} accent={tone(realizedTotal)} />
-        <Stat label="Open P&L" value={pnlStr(openTotal)} accent={tone(openTotal)} />
-        <Stat label="Win Rate" value={closed.length ? winRate + "%" : "—"} accent="text-emerald-400" />
+        {view === "PAPER" ? (<>
+          <Stat label="Account Equity" value={"$" + equity.toFixed(0)} accent={tone(equity - startBal)} />
+          <Stat label="Realized P&L" value={pnlStr(realizedTotal)} accent={tone(realizedTotal)} />
+          <Stat label="Open P&L" value={pnlStr(openTotal)} accent={tone(openTotal)} />
+          <Stat label="Win Rate" value={closed.length ? winRate + "%" : "—"} accent="text-emerald-400" />
+        </>) : (<>
+          <Stat label="Cost Basis" value={"$" + costBasis.toFixed(0)} />
+          <Stat label="Market Value" value={"$" + marketValue.toFixed(0)} accent={tone(marketValue - costBasis)} />
+          <Stat label="Open P&L" value={pnlStr(openTotal)} accent={tone(openTotal)} />
+          <Stat label="Realized P&L" value={pnlStr(realizedTotal)} accent={tone(realizedTotal)} />
+        </>)}
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
@@ -224,6 +241,11 @@ export default function Dashboard() {
             <span className="text-emerald-400">▮</span> {editingId ? "Edit Position" : "Open a Position"}
             {editingId && <button type="button" onClick={cancelEdit} className="ml-auto text-xs text-gray-400 hover:text-gray-200">cancel edit</button>}
           </h2>
+          <div className="col-span-2 flex items-center gap-2">
+            <span className="text-xs text-gray-400">Account:</span>
+            <button type="button" onClick={() => setMode("PAPER")} className={"text-xs px-2 py-0.5 rounded " + (mode === "PAPER" ? "bg-emerald-600" : "bg-gray-800")}>📝 Paper</button>
+            <button type="button" onClick={() => setMode("REAL")} className={"text-xs px-2 py-0.5 rounded " + (mode === "REAL" ? "bg-pink-600" : "bg-gray-800")}>💵 Real money</button>
+          </div>
           <div>
             <Field label="Ticker"><input className="input uppercase" value={form.ticker} onChange={(e) => { update("ticker", e.target.value); setLivePrice(null); }} onBlur={lookupTicker} placeholder="AAPL  (futures: ES=F)" required /></Field>
             {lookingUp && <p className="text-xs text-pink-300 mt-1">fetching price…</p>}
@@ -266,7 +288,7 @@ export default function Dashboard() {
           </div>
           <div className="col-span-2"><Field label="Notes"><textarea className="input" rows={2} value={form.notes} onChange={(e) => update("notes", e.target.value)} /></Field></div>
           <div className="col-span-2">
-            <button type="submit" disabled={loading} className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-lg px-5 py-2.5 font-medium shadow-lg shadow-emerald-900/40 transition">{loading ? "Saving..." : editingId ? "Save Changes" : "Open Position"}</button>
+            <button type="submit" disabled={loading} className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-lg px-5 py-2.5 font-medium shadow-lg shadow-emerald-900/40 transition">{loading ? "Saving..." : editingId ? "Save Changes" : (mode === "REAL" ? "Log Real Position" : "Open Paper Position")}</button>
           </div>
         </form>
 
@@ -284,11 +306,11 @@ export default function Dashboard() {
 
       <section>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold">Open Positions</h2>
+          <h2 className="text-xl font-bold">{view === "REAL" ? "Real Holdings" : "Open Positions"}</h2>
           {!alertsOn && <button onClick={enableAlerts} className="text-xs bg-gray-800 hover:bg-gray-700 rounded px-3 py-1">🔔 Enable alerts</button>}
         </div>
         {open.length === 0 ? (
-          <p className="text-gray-400">No open positions. Open one above.</p>
+          <p className="text-gray-400">No {view === "REAL" ? "real holdings" : "open positions"} yet.</p>
         ) : (
           <div className="space-y-3">
             {open.map((t) => {
@@ -300,6 +322,7 @@ export default function Dashboard() {
                 <div key={t.id} onClick={() => router.push("/trades/" + t.id)} className={"card p-4 cursor-pointer transition " + cls}>
                   <div className="flex items-center gap-3 flex-wrap">
                     <span className="font-bold text-lg">{t.ticker}</span>
+                    {isReal(t) && <span className="text-xs px-2 py-0.5 rounded-full bg-pink-900/50 text-pink-200">💵 REAL</span>}
                     <span className={"text-xs px-2 py-0.5 rounded-full " + (t.side === "BUY" ? "bg-emerald-900/50 text-emerald-300" : "bg-red-900/50 text-red-300")}>{t.side}</span>
                     <span className="text-gray-400 text-sm font-mono">{t.quantity} @ {t.entryPrice}{t.type === "OPTION" && t.strike ? " " + t.optionType + " " + t.strike : ""}</span>
                     <span className="text-sm font-mono text-gray-300">{price != null ? "Now: " + price.toFixed(2) : t.type === "OPTION" ? "live N/A" : "—"}</span>
@@ -332,6 +355,7 @@ export default function Dashboard() {
                 <div key={t.id} onClick={() => router.push("/trades/" + t.id)} className="card p-4 cursor-pointer hover:border-emerald-700 transition">
                   <div className="flex items-center gap-3 flex-wrap">
                     <span className="font-bold">{t.ticker}</span>
+                    {isReal(t) && <span className="text-xs px-2 py-0.5 rounded-full bg-pink-900/50 text-pink-200">💵 REAL</span>}
                     <span className={"text-xs px-2 py-0.5 rounded-full " + (t.side === "BUY" ? "bg-emerald-900/50 text-emerald-300" : "bg-red-900/50 text-red-300")}>{t.side}</span>
                     <span className="text-gray-400 text-sm font-mono">{t.quantity} @ {t.entryPrice} → {t.exitPrice}</span>
                     <span className={"text-sm font-mono font-semibold " + tone(rr)}>{pnlStr(rr)}</span>

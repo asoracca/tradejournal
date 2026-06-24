@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
       entryPrice: Number(body.entryPrice),
       stopLoss: numOrNull(body.stopLoss),
       target: numOrNull(body.target),
+      mode: body.mode === "REAL" ? "REAL" : "PAPER",
       optionType: body.optionType ?? null,
       strike: body.strike ? Number(body.strike) : null,
       expiration: body.expiration ?? null,
@@ -33,13 +34,9 @@ export async function POST(req: NextRequest) {
   let comment = "Trade logged.";
   try {
     comment = await generateTradeComment({
-      ticker: trade.ticker,
-      type: trade.type as "STOCK" | "OPTION" | "FUTURE",
-      side: trade.side as "BUY" | "SELL",
-      quantity: trade.quantity,
-      entryPrice: trade.entryPrice,
-      optionType: trade.optionType as "CALL" | "PUT" | null,
-      strike: trade.strike,
+      ticker: trade.ticker, type: trade.type as "STOCK" | "OPTION" | "FUTURE",
+      side: trade.side as "BUY" | "SELL", quantity: trade.quantity, entryPrice: trade.entryPrice,
+      optionType: trade.optionType as "CALL" | "PUT" | null, strike: trade.strike,
     });
   } catch (err) { comment = "AI failed, fallback comment: " + (err as Error).message; }
 
