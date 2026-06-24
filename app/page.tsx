@@ -22,6 +22,12 @@ const STRATEGIES: { name: string; desc: string }[] = [
   { name: "Day Trade", desc: "Open and close same day. Fast and risky — advanced." },
 ];
 
+const TOL = {
+  CONS: { stop: 5, target: 10, label: "Conservative" },
+  MOD: { stop: 8, target: 16, label: "Moderate" },
+  AGG: { stop: 12, target: 24, label: "Aggressive" },
+} as const;
+
 const emptyForm = {
   ticker: "", type: "STOCK", side: "BUY", quantity: "", entryPrice: "",
   stopLoss: "", target: "", tradeDate: "", optionType: "CALL", strike: "", expiration: "",
@@ -54,6 +60,8 @@ export default function Dashboard() {
   const [mode, setMode] = useState<"PAPER" | "REAL">("PAPER");
   const [view, setView] = useState<"PAPER" | "REAL">("PAPER");
   const [layout, setLayout] = useState<"strips" | "boxes">("strips");
+  const [riskTol, setRiskTol] = useState<"CONS" | "MOD" | "AGG">("MOD");
+  const [applying, setApplying] = useState(false);
   const [sizeMode, setSizeMode] = useState<"shares" | "dollars">("shares");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -66,8 +74,9 @@ export default function Dashboard() {
   const [lookingUp, setLookingUp] = useState(false);
   const notified = useRef<Set<string>>(new Set());
 
-  useEffect(() => { try { const v = localStorage.getItem("tg_layout"); if (v === "boxes" || v === "strips") setLayout(v); const vw = localStorage.getItem("tg_view"); if (vw === "REAL" || vw === "PAPER") { setView(vw); setMode(vw); } } catch {} }, []);
+  useEffect(() => { try { const v = localStorage.getItem("tg_layout"); if (v === "boxes" || v === "strips") setLayout(v); const vw = localStorage.getItem("tg_view"); if (vw === "REAL" || vw === "PAPER") { setView(vw); setMode(vw); } const rt = localStorage.getItem("tg_risk"); if (rt === "CONS" || rt === "MOD" || rt === "AGG") setRiskTol(rt); } catch {} }, []);
   function chooseLayout(l: "strips" | "boxes") { setLayout(l); try { localStorage.setItem("tg_layout", l); } catch {} }
+  function chooseTol(k: "CONS" | "MOD" | "AGG") { setRiskTol(k); try { localStorage.setItem("tg_risk", k); } catch {} }
 
   async function loadTrades() {
     try {
@@ -198,6 +207,22 @@ export default function Dashboard() {
   const inView = trades.filter((t) => (view === "REAL" ? isReal(t) : !isReal(t)));
   const open = inView.filter((t) => t.status === "OPEN");
   const closed = inView.filter((t) => t.status !== "OPEN");
+
+  async function applyRiskToAll() {
+    if (open.length === 0) return;
+    if (!window.confirm("Set a stop & target on all " + open.length + " position(s) using " + TOL[riskTol].label + " risk (stop −" + TOL[riskTol].stop + "%, target +" + TOL[riskTol].target + "%)?")) return;
+    setApplying(true);
+    const { stop, target } = TOL[riskTol];
+    for (const t of open) {
+      const long = t.side === "BUY";
+      const sl = long ? t.entryPrice * (1 - stop / 100) : t.entryPrice * (1 + stop / 100);
+      const tg = long ? t.entryPrice * (1 + target / 100) : t.entryPrice * (1 - target / 100);
+      await fetch("/api/trades/" + t.id, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stopLoss: sl.toFixed(2), target: tg.toFixed(2) }) });
+    }
+    setApplying(false);
+    await loadTrades();
+  }
+
   const startBal = num(startBalStr);
   const realizedTotal = closed.reduce((a, t) => a + realized(t), 0);
   const openTotal = open.reduce((a, t) => a + (unreal(t, prices[t.ticker]) ?? 0), 0);
@@ -331,6 +356,15 @@ export default function Dashboard() {
         </div>
       )}
 
+      {open.length > 0 && (
+        <div className="card p-3 flex items-center gap-3 flex-wrap text-sm">
+          <span className="text-gray-400 text-xs">Risk tolerance:</span>
+          {(["CONS", "MOD", "AGG"] as const).map((k) => <button key={k} onClick={() => chooseTol(k)} className={"text-xs px-2 py-1 rounded " + (riskTol === k ? "bg-emerald-600" : "bg-gray-800")}>{TOL[k].label}</button>)}
+          <span className="text-xs text-gray-500">stop −{TOL[riskTol].stop}% · target +{TOL[riskTol].target}%</span>
+          <button onClick={applyRiskToAll} disabled={applying} className="ml-auto text-xs bg-pink-600 hover:bg-pink-500 rounded px-3 py-1.5 disabled:opacity-50">{applying ? "Applying…" : "🎯 Apply stop/target to all"}</button>
+        </div>
+      )}
+
       <section>
         <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
           <h2 className="text-xl font-bold">{view === "REAL" ? "Real Holdings" : "Open Positions"}</h2>
@@ -379,7 +413,7 @@ export default function Dashboard() {
                     <span className="text-gray-400">Total return</span>
                     <span className={"font-mono font-semibold " + (u == null ? "text-gray-500" : tone(u))}>{u == null ? "—" : pnlStr(u) + (overallPct != null ? " (" + pctStr(overallPct) + ")" : "")}</span>
                   </div>
-                  <div className="mt-2 text-xs text-gray-500">📅 {whenDate(t)} · tap for details →</div>
+                  <div className="mt-2 text-xs text-gray-500">📅 {whenDate(t)}{t.stopLoss != null ? " · stop " + t.stopLoss : ""}{t.target != null ? " · target " + t.target : ""} · tap for details →</div>
                   {layout === "strips" && t.aiComment?.text && <p className="mt-2 text-sm text-gray-300 border-l-2 border-emerald-700 pl-3">🤖 {t.aiComment.text}</p>}
                 </div>
               );

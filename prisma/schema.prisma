@@ -11,6 +11,7 @@ datasource db {
 model Trade {
   id            String     @id @default(cuid())
   createdAt     DateTime   @default(now())
+  tradeDate     DateTime?
   ticker        String
   type          String
   side          String

@@ -3,6 +3,7 @@ import { prisma } from "../../../lib/db";
 import { generateTradeComment } from "../../../lib/ai";
 
 const numOrNull = (v: unknown) => (v == null || v === "" ? null : Number(v));
+const dateOrNull = (v: unknown) => { if (!v) return null; const d = new Date(String(v)); return isNaN(d.getTime()) ? null : d; };
 
 export async function GET() {
   const trades = await prisma.trade.findMany({ include: { aiComment: true }, orderBy: { createdAt: "desc" } });
@@ -11,23 +12,42 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
+  const ticker = String(body.ticker).toUpperCase();
+  const type = body.type, side = body.side;
+  const mode = body.mode === "REAL" ? "REAL" : "PAPER";
+  const qty = Number(body.quantity), entry = Number(body.entryPrice);
+  const optionType = body.optionType ?? null;
+  const strike = body.strike ? Number(body.strike) : null;
+  const expiration = body.expiration ?? null;
+
+  const existing = await prisma.trade.findFirst({
+    where: { ticker, type, side, mode, status: "OPEN", ...(type === "OPTION" ? { optionType, strike, expiration } : {}) },
+  });
+
+  if (existing) {
+    let newQty: number, newEntry: number;
+    if (body.replace) { newQty = qty; newEntry = entry; }
+    else { newQty = existing.quantity + qty; newEntry = newQty ? (existing.quantity * existing.entryPrice + qty * entry) / newQty : entry; }
+    const updated = await prisma.trade.update({
+      where: { id: existing.id },
+      data: {
+        quantity: newQty,
+        entryPrice: Math.round(newEntry * 10000) / 10000,
+        tradeDate: dateOrNull(body.tradeDate) ?? existing.tradeDate,
+        stopLoss: numOrNull(body.stopLoss) ?? existing.stopLoss,
+        target: numOrNull(body.target) ?? existing.target,
+      },
+      include: { aiComment: true },
+    });
+    return NextResponse.json({ ...updated, merged: true });
+  }
+
   const trade = await prisma.trade.create({
     data: {
-      ticker: String(body.ticker).toUpperCase(),
-      type: body.type,
-      side: body.side,
-      quantity: Number(body.quantity),
-      entryPrice: Number(body.entryPrice),
-      stopLoss: numOrNull(body.stopLoss),
-      target: numOrNull(body.target),
-      mode: body.mode === "REAL" ? "REAL" : "PAPER",
-      optionType: body.optionType ?? null,
-      strike: body.strike ? Number(body.strike) : null,
-      expiration: body.expiration ?? null,
-      strategy: body.strategy ?? null,
-      notes: body.notes ?? null,
-      emotion: body.emotion ?? null,
-      rulesFollowed: body.rulesFollowed ?? true,
+      ticker, type, side, mode, quantity: qty, entryPrice: entry,
+      stopLoss: numOrNull(body.stopLoss), target: numOrNull(body.target), tradeDate: dateOrNull(body.tradeDate),
+      optionType, strike, expiration,
+      strategy: body.strategy ?? null, notes: body.notes ?? null, emotion: body.emotion ?? null, rulesFollowed: body.rulesFollowed ?? true,
     },
   });
 
