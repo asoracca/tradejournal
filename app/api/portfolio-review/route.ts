@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
 
   const systemPrompt = "You are a warm trading mentor reviewing a beginner's entire paper-trading portfolio. In 2-3 short paragraphs: (1) overall concentration and diversification - is too much in one name or one theme/sector? (2) leverage exposure - specifically call out any 3x leveraged ETFs and what holding several of them means. (3) one or two concrete, plain-language things to watch or consider. Encouraging and educational, never buy/sell advice or price predictions.";
 
-  const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + apiKey;
+  const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=" + apiKey;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
