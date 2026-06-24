@@ -24,7 +24,7 @@ const STRATEGIES: { name: string; desc: string }[] = [
 
 const emptyForm = {
   ticker: "", type: "STOCK", side: "BUY", quantity: "", entryPrice: "",
-  stopLoss: "", target: "", optionType: "CALL", strike: "", expiration: "",
+  stopLoss: "", target: "", tradeDate: "", optionType: "CALL", strike: "", expiration: "",
   strategy: "Buy & Hold", emotion: "", notes: "",
 };
 
@@ -164,7 +164,7 @@ export default function Dashboard() {
     setForm({
       ticker: t.ticker, type: t.type, side: t.side, quantity: String(t.quantity), entryPrice: String(t.entryPrice),
       stopLoss: t.stopLoss != null ? String(t.stopLoss) : "", target: t.target != null ? String(t.target) : "",
-      optionType: t.optionType || "CALL", strike: t.strike != null ? String(t.strike) : "", expiration: "",
+      optionType: t.optionType || "CALL", strike: t.strike != null ? String(t.strike) : "", expiration: "", tradeDate: (t as unknown as { tradeDate?: string }).tradeDate ? String((t as unknown as { tradeDate?: string }).tradeDate).slice(0, 10) : "",
       strategy: t.strategy || "Buy & Hold", emotion: "", notes: "",
     });
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
@@ -257,6 +257,7 @@ export default function Dashboard() {
           </div>
           <Field label="Type"><select className="input" value={form.type} onChange={(e) => update("type", e.target.value)}><option value="STOCK">Stock</option><option value="OPTION">Option</option><option value="FUTURE">Future</option></select></Field>
           <Field label="Side"><select className="input" value={form.side} onChange={(e) => update("side", e.target.value)}><option value="BUY">Buy / Long</option><option value="SELL">Sell / Short</option></select></Field>
+          <Field label="Trade date (when you bought)"><input className="input" type="date" value={form.tradeDate} onChange={(e) => update("tradeDate", e.target.value)} /></Field>
           <div>
             <div className="flex items-center justify-between mb-1">
               <span className="text-xs text-gray-400">{sizeMode === "shares" ? "Quantity (shares)" : "Amount ($)"}</span>
