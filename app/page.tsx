@@ -56,6 +56,8 @@ export default function Dashboard() {
   const [layout, setLayout] = useState<"strips" | "boxes">("strips");
   const [sizeMode, setSizeMode] = useState<"shares" | "dollars">("shares");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [showAdv, setShowAdv] = useState(false);
   const [startBalStr, setStartBalStr] = useState("100000");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -145,6 +147,9 @@ export default function Dashboard() {
 
   const riskTone = calc.riskPct === 0 ? "text-gray-400" : calc.riskPct <= 1 ? "text-emerald-400" : calc.riskPct <= 2 ? "text-yellow-400" : "text-red-400";
 
+  function openNewForm() { setEditingId(null); setForm(emptyForm); setMode(view); setSizeMode("shares"); setLivePrice(null); setShowAdv(false); setShowForm(true); }
+  function closeForm() { setShowForm(false); setEditingId(null); setForm(emptyForm); setSizeMode("shares"); setLivePrice(null); }
+
   async function submit(e: FormEvent) {
     e.preventDefault();
     setLoading(true); setError(null);
@@ -158,13 +163,13 @@ export default function Dashboard() {
         const res = await fetch("/api/trades", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
         if (!res.ok) throw new Error("Failed to save trade");
       }
-      setForm(emptyForm); setEditingId(null); setSizeMode("shares"); setLivePrice(null);
+      closeForm();
       await loadTrades();
     } catch (e) { setError((e as Error).message); } finally { setLoading(false); }
   }
 
   function editStart(t: Trade) {
-    setEditingId(t.id); setSizeMode("shares"); setLivePrice(null); setMode(t.mode === "REAL" ? "REAL" : "PAPER");
+    setEditingId(t.id); setSizeMode("shares"); setLivePrice(null); setMode(t.mode === "REAL" ? "REAL" : "PAPER"); setShowAdv(true); setShowForm(true);
     setForm({
       ticker: t.ticker, type: t.type, side: t.side, quantity: String(t.quantity), entryPrice: String(t.entryPrice),
       stopLoss: t.stopLoss != null ? String(t.stopLoss) : "", target: t.target != null ? String(t.target) : "",
@@ -174,7 +179,6 @@ export default function Dashboard() {
     });
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
-  function cancelEdit() { setEditingId(null); setForm(emptyForm); setSizeMode("shares"); setLivePrice(null); setMode(view); }
 
   async function closeTrade(t: Trade) {
     const live = prices[t.ticker];
@@ -208,31 +212,21 @@ export default function Dashboard() {
   const stratDesc = STRATEGIES.find((s) => s.name === form.strategy)?.desc;
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto">
+    <div className="space-y-6 max-w-6xl mx-auto">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold gradient-text">{view === "REAL" ? "Real Portfolio" : "Paper Trading Desk"}</h1>
-          <p className="text-gray-400 text-sm mt-1">{view === "REAL" ? "Your real holdings (delayed prices — Schwab is the source of truth)." : "Practice with fake money and live market prices."}</p>
-          <a href="/learn" className="text-xs text-emerald-400 hover:underline">New to trading? Read the quick guide →</a>
+          <p className="text-gray-400 text-sm mt-1">{view === "REAL" ? "Your real holdings (delayed prices — Schwab is the source of truth)." : "Practice with fake money and live prices."}</p>
         </div>
-        <div className="flex flex-col items-end gap-2">
-          <div className="card p-1 flex gap-1">
-            <button onClick={() => { setView("PAPER"); setMode("PAPER"); }} className={"px-3 py-1.5 rounded-lg text-sm " + (view === "PAPER" ? "bg-emerald-600" : "")}>📝 Paper</button>
-            <button onClick={() => { setView("REAL"); setMode("REAL"); }} className={"px-3 py-1.5 rounded-lg text-sm " + (view === "REAL" ? "bg-pink-600" : "")}>💵 Real</button>
-          </div>
-          {view === "PAPER" && (
-            <label className="card px-4 py-2 flex items-center gap-3">
-              <span className="text-xs uppercase tracking-wide text-gray-400">Starting Balance</span>
-              <span className="text-gray-400">$</span>
-              <input className="bg-transparent w-24 outline-none text-emerald-400 font-mono" value={startBalStr} onChange={(e) => setStartBalStr(e.target.value)} />
-            </label>
-          )}
+        <div className="card p-1 flex gap-1">
+          <button onClick={() => { setView("PAPER"); setMode("PAPER"); }} className={"px-3 py-1.5 rounded-lg text-sm " + (view === "PAPER" ? "bg-emerald-600" : "")}>📝 Paper</button>
+          <button onClick={() => { setView("REAL"); setMode("REAL"); }} className={"px-3 py-1.5 rounded-lg text-sm " + (view === "REAL" ? "bg-pink-600" : "")}>💵 Real</button>
         </div>
       </header>
 
       {error && <div className="card border-red-800/60 p-4 text-sm text-red-300">⚠ {error}.</div>}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {view === "PAPER" ? (<>
           <Stat label="Account Equity" value={"$" + equity.toFixed(0)} accent={tone(equity - startBal)} />
           <Stat label="Realized P&L" value={pnlStr(realizedTotal)} accent={tone(realizedTotal)} />
@@ -250,89 +244,105 @@ export default function Dashboard() {
         <div className="text-sm text-gray-400">Today&apos;s change: <span className={"font-mono font-semibold " + tone(totalDay)}>{pnlStr(totalDay)}</span> across {open.length} position{open.length === 1 ? "" : "s"}</div>
       )}
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        <form onSubmit={submit} className="card p-6 lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <h2 className="col-span-2 text-lg font-semibold flex items-center gap-2">
-            <span className="text-emerald-400">▮</span> {editingId ? "Edit Position" : "Open a Position"}
-            {editingId && <button type="button" onClick={cancelEdit} className="ml-auto text-xs text-gray-400 hover:text-gray-200">cancel edit</button>}
-          </h2>
-          <div className="col-span-2 flex items-center gap-2">
-            <span className="text-xs text-gray-400">Account:</span>
-            <button type="button" onClick={() => setMode("PAPER")} className={"text-xs px-2 py-0.5 rounded " + (mode === "PAPER" ? "bg-emerald-600" : "bg-gray-800")}>📝 Paper</button>
-            <button type="button" onClick={() => setMode("REAL")} className={"text-xs px-2 py-0.5 rounded " + (mode === "REAL" ? "bg-pink-600" : "bg-gray-800")}>💵 Real money</button>
-          </div>
-          <div>
-            <Field label="Ticker"><input className="input uppercase" value={form.ticker} onChange={(e) => { update("ticker", e.target.value); setLivePrice(null); }} onBlur={lookupTicker} placeholder="AAPL  (futures: ES=F)" required /></Field>
-            {lookingUp && <p className="text-xs text-pink-300 mt-1">fetching price…</p>}
-          </div>
-          <Field label="Type"><select className="input" value={form.type} onChange={(e) => update("type", e.target.value)}><option value="STOCK">Stock</option><option value="OPTION">Option</option><option value="FUTURE">Future</option></select></Field>
-          <Field label="Side"><select className="input" value={form.side} onChange={(e) => update("side", e.target.value)}><option value="BUY">Buy / Long</option><option value="SELL">Sell / Short</option></select></Field>
-          <Field label="Trade date (when you bought)"><input className="input" type="date" value={form.tradeDate} onChange={(e) => update("tradeDate", e.target.value)} /></Field>
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs text-gray-400">{sizeMode === "shares" ? "Quantity (shares)" : "Amount ($)"}</span>
-              <div className="flex gap-1 text-xs">
-                <button type="button" onClick={() => setSizeMode("shares")} className={"px-1.5 py-0.5 rounded " + (sizeMode === "shares" ? "bg-emerald-600" : "bg-gray-800")}>Shares</button>
-                <button type="button" onClick={() => setSizeMode("dollars")} className={"px-1.5 py-0.5 rounded " + (sizeMode === "dollars" ? "bg-emerald-600" : "bg-gray-800")}>Dollars</button>
+      {!showForm ? (
+        <button onClick={openNewForm} className="w-full card border-dashed border-pink-700/40 p-4 text-pink-300 hover:bg-pink-950/20 transition font-medium">+ New Position</button>
+      ) : (
+        <div className="grid lg:grid-cols-3 gap-6">
+          <form onSubmit={submit} className="card p-6 lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <h2 className="col-span-2 text-lg font-semibold flex items-center gap-2">
+              {editingId ? "Edit Position" : "New Position"}
+              <button type="button" onClick={closeForm} className="ml-auto text-xs text-gray-400 hover:text-gray-200">✕ close</button>
+            </h2>
+            <div className="col-span-2 flex items-center gap-2">
+              <span className="text-xs text-gray-400">Account:</span>
+              <button type="button" onClick={() => setMode("PAPER")} className={"text-xs px-2 py-0.5 rounded " + (mode === "PAPER" ? "bg-emerald-600" : "bg-gray-800")}>📝 Paper</button>
+              <button type="button" onClick={() => setMode("REAL")} className={"text-xs px-2 py-0.5 rounded " + (mode === "REAL" ? "bg-pink-600" : "bg-gray-800")}>💵 Real</button>
+            </div>
+            <div>
+              <Field label="Ticker"><input className="input uppercase" value={form.ticker} onChange={(e) => { update("ticker", e.target.value); setLivePrice(null); }} onBlur={lookupTicker} placeholder="AAPL" required /></Field>
+              {lookingUp && <p className="text-xs text-pink-300 mt-1">fetching price…</p>}
+            </div>
+            <Field label="Type"><select className="input" value={form.type} onChange={(e) => update("type", e.target.value)}><option value="STOCK">Stock</option><option value="OPTION">Option</option><option value="FUTURE">Future</option></select></Field>
+            <Field label="Side"><select className="input" value={form.side} onChange={(e) => update("side", e.target.value)}><option value="BUY">Buy / Long</option><option value="SELL">Sell / Short</option></select></Field>
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs text-gray-400">{sizeMode === "shares" ? "Quantity" : "Amount ($)"}</span>
+                <div className="flex gap-1 text-xs">
+                  <button type="button" onClick={() => setSizeMode("shares")} className={"px-1.5 py-0.5 rounded " + (sizeMode === "shares" ? "bg-emerald-600" : "bg-gray-800")}>Shares</button>
+                  <button type="button" onClick={() => setSizeMode("dollars")} className={"px-1.5 py-0.5 rounded " + (sizeMode === "dollars" ? "bg-emerald-600" : "bg-gray-800")}>$</button>
+                </div>
               </div>
+              <input className="input" type="number" step="any" value={form.quantity} onChange={(e) => update("quantity", e.target.value)} required />
+              {sizeMode === "dollars" && entryNum > 0 && num(form.quantity) > 0 && (<p className="text-xs text-gray-400 mt-1">= {(num(form.quantity) / entryNum).toFixed(4)} shares</p>)}
             </div>
-            <input className="input" type="number" step="any" value={form.quantity} onChange={(e) => update("quantity", e.target.value)} required />
-            {sizeMode === "dollars" && entryNum > 0 && num(form.quantity) > 0 && (<p className="text-xs text-gray-400 mt-1">= {(num(form.quantity) / entryNum).toFixed(4)} shares</p>)}
-          </div>
-          <div>
-            <Field label="Entry Price"><input className="input" type="number" step="any" value={form.entryPrice} onChange={(e) => update("entryPrice", e.target.value)} required /></Field>
-            {livePrice != null && <button type="button" onClick={() => update("entryPrice", livePrice.toFixed(2))} className="text-xs text-pink-300 hover:underline mt-1">↻ live ${livePrice.toFixed(2)}</button>}
-          </div>
-          <Field label="Stop Loss"><input className="input" type="number" step="any" value={form.stopLoss} onChange={(e) => update("stopLoss", e.target.value)} placeholder="optional" /></Field>
-          <Field label="Target"><input className="input" type="number" step="any" value={form.target} onChange={(e) => update("target", e.target.value)} placeholder="optional" /></Field>
-          {entryNum > 0 && (
-            <div className="col-span-2 -mt-1 flex flex-wrap items-center gap-1.5 text-xs">
-              <span className="text-gray-400">Quick stop:</span>
-              {[5, 10, 15].map((p) => { const px = (entryNum * (1 - p / 100)).toFixed(2); return <button type="button" key={"s" + p} onClick={() => update("stopLoss", px)} className="bg-gray-800 hover:bg-red-900/50 rounded px-2 py-0.5">-{p}% (${px})</button>; })}
-              <span className="text-gray-400 ml-2">Quick target:</span>
-              {[10, 20, 30].map((p) => { const px = (entryNum * (1 + p / 100)).toFixed(2); return <button type="button" key={"t" + p} onClick={() => update("target", px)} className="bg-gray-800 hover:bg-emerald-900/50 rounded px-2 py-0.5">+{p}% (${px})</button>; })}
+            <div>
+              <Field label="Entry Price"><input className="input" type="number" step="any" value={form.entryPrice} onChange={(e) => update("entryPrice", e.target.value)} required /></Field>
+              {livePrice != null && <button type="button" onClick={() => update("entryPrice", livePrice.toFixed(2))} className="text-xs text-pink-300 hover:underline mt-1">↻ live ${livePrice.toFixed(2)}</button>}
             </div>
-          )}
-          {isOption && (<>
-            <Field label="Call / Put"><select className="input" value={form.optionType} onChange={(e) => update("optionType", e.target.value)}><option value="CALL">Call</option><option value="PUT">Put</option></select></Field>
-            <Field label="Strike"><input className="input" type="number" step="any" value={form.strike} onChange={(e) => update("strike", e.target.value)} /></Field>
-            <Field label="Expiration"><input className="input" type="date" value={form.expiration} onChange={(e) => update("expiration", e.target.value)} /></Field>
-          </>)}
-          <div className="col-span-2">
-            <Field label="Strategy"><select className="input" value={form.strategy} onChange={(e) => update("strategy", e.target.value)}>{STRATEGIES.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}</select></Field>
-            <p className="text-xs text-gray-400 mt-1">{stratDesc}</p>
-          </div>
-          <div className="col-span-2"><Field label="Notes"><textarea className="input" rows={2} value={form.notes} onChange={(e) => update("notes", e.target.value)} /></Field></div>
-          <div className="col-span-2">
-            <button type="submit" disabled={loading} className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-lg px-5 py-2.5 font-medium shadow-lg shadow-emerald-900/40 transition">{loading ? "Saving..." : editingId ? "Save Changes" : (mode === "REAL" ? "Log Real Position" : "Open Paper Position")}</button>
-          </div>
-        </form>
+            {isOption && (<>
+              <Field label="Call / Put"><select className="input" value={form.optionType} onChange={(e) => update("optionType", e.target.value)}><option value="CALL">Call</option><option value="PUT">Put</option></select></Field>
+              <Field label="Strike"><input className="input" type="number" step="any" value={form.strike} onChange={(e) => update("strike", e.target.value)} /></Field>
+              <Field label="Expiration"><input className="input" type="date" value={form.expiration} onChange={(e) => update("expiration", e.target.value)} /></Field>
+            </>)}
 
-        <div className="space-y-6">
-          <div className="card p-5">
+            <button type="button" onClick={() => setShowAdv((a) => !a)} className="col-span-2 text-xs text-emerald-400 text-left hover:underline">{showAdv ? "▾ Hide details" : "▸ Add stop loss, target, date, strategy & notes"}</button>
+
+            {showAdv && (<>
+              <Field label="Trade date (when you bought)"><input className="input" type="date" value={form.tradeDate} onChange={(e) => update("tradeDate", e.target.value)} /></Field>
+              <div className="hidden sm:block" />
+              <Field label="Stop Loss"><input className="input" type="number" step="any" value={form.stopLoss} onChange={(e) => update("stopLoss", e.target.value)} placeholder="optional" /></Field>
+              <Field label="Target"><input className="input" type="number" step="any" value={form.target} onChange={(e) => update("target", e.target.value)} placeholder="optional" /></Field>
+              {entryNum > 0 && (
+                <div className="col-span-2 -mt-1 flex flex-wrap items-center gap-1.5 text-xs">
+                  <span className="text-gray-400">Quick stop:</span>
+                  {[5, 10, 15].map((p) => { const px = (entryNum * (1 - p / 100)).toFixed(2); return <button type="button" key={"s" + p} onClick={() => update("stopLoss", px)} className="bg-gray-800 hover:bg-red-900/50 rounded px-2 py-0.5">-{p}%</button>; })}
+                  <span className="text-gray-400 ml-2">Target:</span>
+                  {[10, 20, 30].map((p) => { const px = (entryNum * (1 + p / 100)).toFixed(2); return <button type="button" key={"t" + p} onClick={() => update("target", px)} className="bg-gray-800 hover:bg-emerald-900/50 rounded px-2 py-0.5">+{p}%</button>; })}
+                </div>
+              )}
+              <div className="col-span-2">
+                <Field label="Strategy"><select className="input" value={form.strategy} onChange={(e) => update("strategy", e.target.value)}>{STRATEGIES.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}</select></Field>
+                <p className="text-xs text-gray-400 mt-1">{stratDesc}</p>
+              </div>
+              <div className="col-span-2"><Field label="Notes"><textarea className="input" rows={2} value={form.notes} onChange={(e) => update("notes", e.target.value)} /></Field></div>
+            </>)}
+
+            <div className="col-span-2 flex items-center gap-3">
+              <button type="submit" disabled={loading} className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-lg px-5 py-2.5 font-medium transition">{loading ? "Saving..." : editingId ? "Save Changes" : "Add Position"}</button>
+              <button type="button" onClick={closeForm} className="text-sm text-gray-400 hover:text-gray-200">cancel</button>
+            </div>
+          </form>
+
+          <div className="card p-5 self-start">
             <h3 className="text-sm uppercase tracking-wide text-gray-400 mb-2">Risk Meter</h3>
             <div className="mb-4"><Blobfish level={calc.riskPct} pct={calc.riskPct} /></div>
             <Metric label="Risk on this trade" value={calc.totalRisk ? "$" + calc.totalRisk.toFixed(2) : "—"} tone={riskTone} />
             <Metric label="% of account" value={calc.riskPct ? calc.riskPct.toFixed(2) + "%" : "—"} tone={riskTone} />
             <Metric label="Potential profit" value={calc.totalReward ? "$" + calc.totalReward.toFixed(2) : "—"} tone="text-emerald-400" />
             <Metric label="Risk : Reward" value={calc.rr ? "1 : " + calc.rr.toFixed(2) : "—"} tone={calc.rr >= 2 ? "text-emerald-400" : "text-gray-300"} />
+            {view === "PAPER" && (
+              <label className="mt-3 pt-3 border-t border-gray-800 flex items-center justify-between text-xs text-gray-400">
+                <span>Account size</span>
+                <span>$ <input className="bg-transparent w-20 outline-none text-emerald-400 font-mono text-right" value={startBalStr} onChange={(e) => setStartBalStr(e.target.value)} /></span>
+              </label>
+            )}
           </div>
         </div>
-      </div>
+      )}
 
       <section>
-        <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+        <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
           <h2 className="text-xl font-bold">{view === "REAL" ? "Real Holdings" : "Open Positions"}</h2>
           <div className="flex items-center gap-2">
             <div className="flex gap-1 text-xs">
-              <button onClick={() => chooseLayout("strips")} className={"px-2 py-1 rounded " + (layout === "strips" ? "bg-emerald-600" : "bg-gray-800")}>▤ Strips</button>
-              <button onClick={() => chooseLayout("boxes")} className={"px-2 py-1 rounded " + (layout === "boxes" ? "bg-emerald-600" : "bg-gray-800")}>▦ Boxes</button>
+              <button onClick={() => chooseLayout("strips")} className={"px-2 py-1 rounded " + (layout === "strips" ? "bg-emerald-600" : "bg-gray-800")}>▤</button>
+              <button onClick={() => chooseLayout("boxes")} className={"px-2 py-1 rounded " + (layout === "boxes" ? "bg-emerald-600" : "bg-gray-800")}>▦</button>
             </div>
-            {!alertsOn && <button onClick={enableAlerts} className="text-xs bg-gray-800 hover:bg-gray-700 rounded px-3 py-1">🔔 Alerts</button>}
+            {!alertsOn && <button onClick={enableAlerts} className="text-xs bg-gray-800 hover:bg-gray-700 rounded px-3 py-1">🔔</button>}
           </div>
         </div>
         {open.length === 0 ? (
-          <p className="text-gray-400">No {view === "REAL" ? "real holdings" : "open positions"} yet.</p>
+          <p className="text-gray-400">No {view === "REAL" ? "real holdings" : "open positions"} yet. Click “+ New Position” to add one.</p>
         ) : (
           <div className={listCls}>
             {open.map((t) => {
@@ -368,7 +378,7 @@ export default function Dashboard() {
                     <span className="text-gray-400">Total return</span>
                     <span className={"font-mono font-semibold " + (u == null ? "text-gray-500" : tone(u))}>{u == null ? "—" : pnlStr(u) + (overallPct != null ? " (" + pctStr(overallPct) + ")" : "")}</span>
                   </div>
-                  <div className="mt-2 text-xs text-gray-500">📅 {whenDate(t)}{t.stopLoss != null ? " · stop " + t.stopLoss : ""}{t.target != null ? " · target " + t.target : ""} · tap for details →</div>
+                  <div className="mt-2 text-xs text-gray-500">📅 {whenDate(t)} · tap for details →</div>
                   {layout === "strips" && t.aiComment?.text && <p className="mt-2 text-sm text-gray-300 border-l-2 border-emerald-700 pl-3">🤖 {t.aiComment.text}</p>}
                 </div>
               );
@@ -378,7 +388,7 @@ export default function Dashboard() {
       </section>
 
       <section>
-        <h2 className="text-xl font-bold mb-4">Trade History</h2>
+        <h2 className="text-xl font-bold mb-3">Trade History</h2>
         {closed.length === 0 ? (
           <p className="text-gray-400">No closed trades yet.</p>
         ) : (
