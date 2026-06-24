@@ -14,8 +14,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <nav className="sticky top-0 z-10 border-b border-pink-900/30 bg-[#140a14]/80 backdrop-blur px-4 sm:px-6 py-3 flex gap-4 items-center overflow-x-auto whitespace-nowrap">
           <span className="font-bold text-lg shrink-0">🫧 <span className="gradient-text">TradeGoons</span></span>
           <Link href="/" className="text-sm text-pink-100/80 hover:text-pink-300 shrink-0">Dashboard</Link>
+          <Link href="/coach" className="text-sm text-pink-100/80 hover:text-pink-300 shrink-0">AI Coach</Link>
           <Link href="/trades" className="text-sm text-pink-100/80 hover:text-pink-300 shrink-0">Trades</Link>
-          <Link href="/review" className="text-sm text-pink-100/80 hover:text-pink-300 shrink-0">AI Review</Link>
+          <Link href="/stats" className="text-sm text-pink-100/80 hover:text-pink-300 shrink-0">Stats</Link>
+          <Link href="/review" className="text-sm text-pink-100/80 hover:text-pink-300 shrink-0">Review</Link>
           <Link href="/networth" className="text-sm text-pink-100/80 hover:text-pink-300 shrink-0">Net Worth</Link>
           <Link href="/options" className="text-sm text-pink-100/80 hover:text-pink-300 shrink-0">Options</Link>
           <Link href="/scan" className="text-sm text-pink-100/80 hover:text-pink-300 shrink-0">Scan</Link>
