@@ -53,6 +53,7 @@ export default function Dashboard() {
   const [form, setForm] = useState(emptyForm);
   const [mode, setMode] = useState<"PAPER" | "REAL">("PAPER");
   const [view, setView] = useState<"PAPER" | "REAL">("PAPER");
+  const [layout, setLayout] = useState<"strips" | "boxes">("strips");
   const [sizeMode, setSizeMode] = useState<"shares" | "dollars">("shares");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [startBalStr, setStartBalStr] = useState("100000");
@@ -62,6 +63,9 @@ export default function Dashboard() {
   const [livePrice, setLivePrice] = useState<number | null>(null);
   const [lookingUp, setLookingUp] = useState(false);
   const notified = useRef<Set<string>>(new Set());
+
+  useEffect(() => { try { const v = localStorage.getItem("tg_layout"); if (v === "boxes" || v === "strips") setLayout(v); } catch {} }, []);
+  function chooseLayout(l: "strips" | "boxes") { setLayout(l); try { localStorage.setItem("tg_layout", l); } catch {} }
 
   async function loadTrades() {
     try {
@@ -192,6 +196,7 @@ export default function Dashboard() {
   const winRate = closed.length ? Math.round((wins / closed.length) * 100) : 0;
   const costBasis = open.reduce((a, t) => a + t.entryPrice * t.quantity * mlt(t), 0);
   const marketValue = open.reduce((a, t) => { const p = prices[t.ticker]; return a + (p != null ? p : t.entryPrice) * t.quantity * mlt(t); }, 0);
+  const listCls = layout === "boxes" ? "grid grid-cols-2 lg:grid-cols-3 gap-3" : "space-y-3";
 
   const isOption = form.type === "OPTION";
   const stratDesc = STRATEGIES.find((s) => s.name === form.strategy)?.desc;
@@ -305,14 +310,20 @@ export default function Dashboard() {
       </div>
 
       <section>
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
           <h2 className="text-xl font-bold">{view === "REAL" ? "Real Holdings" : "Open Positions"}</h2>
-          {!alertsOn && <button onClick={enableAlerts} className="text-xs bg-gray-800 hover:bg-gray-700 rounded px-3 py-1">🔔 Enable alerts</button>}
+          <div className="flex items-center gap-2">
+            <div className="flex gap-1 text-xs">
+              <button onClick={() => chooseLayout("strips")} className={"px-2 py-1 rounded " + (layout === "strips" ? "bg-emerald-600" : "bg-gray-800")}>▤ Strips</button>
+              <button onClick={() => chooseLayout("boxes")} className={"px-2 py-1 rounded " + (layout === "boxes" ? "bg-emerald-600" : "bg-gray-800")}>▦ Boxes</button>
+            </div>
+            {!alertsOn && <button onClick={enableAlerts} className="text-xs bg-gray-800 hover:bg-gray-700 rounded px-3 py-1">🔔 Alerts</button>}
+          </div>
         </div>
         {open.length === 0 ? (
           <p className="text-gray-400">No {view === "REAL" ? "real holdings" : "open positions"} yet.</p>
         ) : (
-          <div className="space-y-3">
+          <div className={listCls}>
             {open.map((t) => {
               const price = prices[t.ticker];
               const u = unreal(t, price);
@@ -320,22 +331,23 @@ export default function Dashboard() {
               const cls = hit === "STOP" ? "border-red-500/70 bg-red-950/30" : hit === "TARGET" ? "border-emerald-500/70 bg-emerald-950/30" : "hover:border-emerald-700";
               return (
                 <div key={t.id} onClick={() => router.push("/trades/" + t.id)} className={"card p-4 cursor-pointer transition " + cls}>
-                  <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-bold text-lg">{t.ticker}</span>
-                    {isReal(t) && <span className="text-xs px-2 py-0.5 rounded-full bg-pink-900/50 text-pink-200">💵 REAL</span>}
+                    {isReal(t) && <span className="text-xs px-2 py-0.5 rounded-full bg-pink-900/50 text-pink-200">💵</span>}
                     <span className={"text-xs px-2 py-0.5 rounded-full " + (t.side === "BUY" ? "bg-emerald-900/50 text-emerald-300" : "bg-red-900/50 text-red-300")}>{t.side}</span>
                     <span className="text-gray-400 text-sm font-mono">{t.quantity} @ {t.entryPrice}{t.type === "OPTION" && t.strike ? " " + t.optionType + " " + t.strike : ""}</span>
-                    <span className="text-sm font-mono text-gray-300">{price != null ? "Now: " + price.toFixed(2) : t.type === "OPTION" ? "live N/A" : "—"}</span>
-                    <span className={"text-sm font-mono font-semibold " + (u == null ? "text-gray-500" : tone(u))}>{u == null ? "" : pnlStr(u)}</span>
-                    {hit && <span className={"text-xs px-2 py-0.5 rounded-full font-semibold " + (hit === "STOP" ? "bg-red-900/60 text-red-200" : "bg-emerald-900/60 text-emerald-200")}>{hit === "STOP" ? "✋ Stop hit" : "🎯 Target hit"}</span>}
-                    <span className="ml-auto flex gap-2">
-                      <button onClick={(e) => { e.stopPropagation(); editStart(t); }} className="text-xs bg-gray-800 hover:bg-gray-700 rounded px-3 py-1">Edit</button>
-                      <button onClick={(e) => { e.stopPropagation(); closeTrade(t); }} className="text-xs bg-gray-800 hover:bg-gray-700 rounded px-3 py-1">Close</button>
-                      <button onClick={(e) => { e.stopPropagation(); deleteTrade(t); }} className="text-xs text-gray-500 hover:text-red-400 px-2">✕</button>
-                    </span>
+                    {hit && <span className={"text-xs px-2 py-0.5 rounded-full font-semibold " + (hit === "STOP" ? "bg-red-900/60 text-red-200" : "bg-emerald-900/60 text-emerald-200")}>{hit === "STOP" ? "✋" : "🎯"}</span>}
                   </div>
-                  <div className="mt-1 text-xs text-gray-500">🕒 {fmtDate(t.createdAt)}{t.stopLoss != null ? " · stop " + t.stopLoss : ""}{t.target != null ? " · target " + t.target : ""} · tap for details →</div>
-                  {t.aiComment?.text && <p className="mt-2 text-sm text-gray-300 border-l-2 border-emerald-700 pl-3">🤖 {t.aiComment.text}</p>}
+                  <div className="flex items-center gap-3 mt-2 text-sm font-mono">
+                    <span className="text-gray-300">{price != null ? "Now " + price.toFixed(2) : t.type === "OPTION" ? "live N/A" : "—"}</span>
+                    <span className={"font-semibold " + (u == null ? "text-gray-500" : tone(u))}>{u == null ? "" : pnlStr(u)}</span>
+                  </div>
+                  <div className="flex gap-2 mt-2">
+                    <button onClick={(e) => { e.stopPropagation(); editStart(t); }} className="text-xs bg-gray-800 hover:bg-gray-700 rounded px-3 py-1">Edit</button>
+                    <button onClick={(e) => { e.stopPropagation(); closeTrade(t); }} className="text-xs bg-gray-800 hover:bg-gray-700 rounded px-3 py-1">Close</button>
+                    <button onClick={(e) => { e.stopPropagation(); deleteTrade(t); }} className="text-xs text-gray-500 hover:text-red-400 px-2">✕</button>
+                  </div>
+                  {layout === "strips" && t.aiComment?.text && <p className="mt-2 text-sm text-gray-300 border-l-2 border-emerald-700 pl-3">🤖 {t.aiComment.text}</p>}
                 </div>
               );
             })}
@@ -348,24 +360,22 @@ export default function Dashboard() {
         {closed.length === 0 ? (
           <p className="text-gray-400">No closed trades yet.</p>
         ) : (
-          <div className="space-y-3">
+          <div className={listCls}>
             {closed.map((t) => {
               const rr = realized(t);
               return (
                 <div key={t.id} onClick={() => router.push("/trades/" + t.id)} className="card p-4 cursor-pointer hover:border-emerald-700 transition">
-                  <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-bold">{t.ticker}</span>
-                    {isReal(t) && <span className="text-xs px-2 py-0.5 rounded-full bg-pink-900/50 text-pink-200">💵 REAL</span>}
+                    {isReal(t) && <span className="text-xs px-2 py-0.5 rounded-full bg-pink-900/50 text-pink-200">💵</span>}
                     <span className={"text-xs px-2 py-0.5 rounded-full " + (t.side === "BUY" ? "bg-emerald-900/50 text-emerald-300" : "bg-red-900/50 text-red-300")}>{t.side}</span>
-                    <span className="text-gray-400 text-sm font-mono">{t.quantity} @ {t.entryPrice} → {t.exitPrice}</span>
                     <span className={"text-sm font-mono font-semibold " + tone(rr)}>{pnlStr(rr)}</span>
-                    <span className="ml-auto flex gap-2">
-                      <button onClick={(e) => { e.stopPropagation(); editStart(t); }} className="text-xs bg-gray-800 hover:bg-gray-700 rounded px-3 py-1">Edit</button>
-                      <button onClick={(e) => { e.stopPropagation(); deleteTrade(t); }} className="text-xs text-gray-500 hover:text-red-400 px-2">✕</button>
-                    </span>
                   </div>
-                  <div className="mt-1 text-xs text-gray-500">🕒 {fmtDate(t.createdAt)} · tap for details →</div>
-                  {t.aiComment?.text && <p className="mt-2 text-sm text-gray-300 border-l-2 border-emerald-700 pl-3">🤖 {t.aiComment.text}</p>}
+                  <div className="text-gray-400 text-sm font-mono mt-1">{t.quantity} @ {t.entryPrice} → {t.exitPrice}</div>
+                  <div className="flex gap-2 mt-2">
+                    <button onClick={(e) => { e.stopPropagation(); editStart(t); }} className="text-xs bg-gray-800 hover:bg-gray-700 rounded px-3 py-1">Edit</button>
+                    <button onClick={(e) => { e.stopPropagation(); deleteTrade(t); }} className="text-xs text-gray-500 hover:text-red-400 px-2">✕</button>
+                  </div>
                 </div>
               );
             })}
