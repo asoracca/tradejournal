@@ -109,6 +109,7 @@ export default function Dashboard() {
   }
 
   useEffect(() => { loadTrades(); }, []);
+  useEffect(() => { try { localStorage.setItem("tg_theme", view); document.documentElement.setAttribute("data-theme", view); } catch {} }, [view]);
   useEffect(() => {
     const syms = Array.from(new Set(trades.filter((t) => t.status === "OPEN" && t.type !== "OPTION").map((t) => t.ticker)));
     if (syms.length) loadPrices(syms);
