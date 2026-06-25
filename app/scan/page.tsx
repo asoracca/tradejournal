@@ -2,7 +2,9 @@
 
 import { useState, type ChangeEvent } from "react";
 
-type Pos = { ticker: string; type: string; side: string; quantity: number; entryPrice: number };
+type Pos = { ticker: string; type: string; side: string; quantity: number; entryPrice: number; tradeDate?: string | null };
+type T = { id: string; mode: string; status: string };
+const ACCOUNTS = ["Individual", "Roth IRA", "Traditional IRA", "401k", "Other"];
 
 function resizeImage(file: File): Promise<{ base64: string; dataUrl: string }> {
   return new Promise((resolve, reject) => {
@@ -28,7 +30,6 @@ function resizeImage(file: File): Promise<{ base64: string; dataUrl: string }> {
     reader.readAsDataURL(file);
   });
 }
-
 function readBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -45,6 +46,8 @@ export default function ScanPage() {
   const [preview, setPreview] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [added, setAdded] = useState(0);
+  const [account, setAccount] = useState("Individual");
+  const [replaceAll, setReplaceAll] = useState(false);
 
   async function handleFile(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -63,14 +66,12 @@ export default function ScanPage() {
       } else if (name.endsWith(".csv") || name.endsWith(".txt") || file.type.includes("csv") || file.type.startsWith("text/")) {
         setFileName(file.name);
         payload = { text: await file.text() };
-      } else {
-        throw new Error("Unsupported file type. Upload an image, PDF, or CSV.");
-      }
+      } else { throw new Error("Unsupported file type. Upload an image, PDF, or CSV."); }
       const res = await fetch("/api/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Scan failed");
       setPositions(Array.isArray(data.positions) ? data.positions : []);
-      if (!data.positions || data.positions.length === 0) setError("Couldn't read any positions from that file. For a PDF use the holdings page; for a screenshot make it clear and close.");
+      if (!data.positions || data.positions.length === 0) setError("Couldn't read any positions. For a PDF use the holdings page; for a screenshot make it clear and close.");
     } catch (err) { setError((err as Error).message); }
     finally { setBusy(false); }
   }
@@ -84,8 +85,13 @@ export default function ScanPage() {
     setBusy(true); setError(null);
     let count = 0;
     try {
+      if (replaceAll) {
+        const all = await (await fetch("/api/trades")).json();
+        const realOpen = (Array.isArray(all) ? all : []).filter((t: T) => t.mode === "REAL" && t.status === "OPEN");
+        for (const t of realOpen) await fetch("/api/trades/" + t.id, { method: "DELETE" });
+      }
       for (const p of positions) {
-        const res = await fetch("/api/trades", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...p, mode: "REAL", replace: true, strategy: "Imported", notes: "Imported from file" }) });
+        const res = await fetch("/api/trades", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...p, mode: "REAL", account, replace: true, strategy: "Imported", notes: "Imported from file" }) });
         if (res.ok) count++;
       }
       setAdded(count); setPositions([]);
@@ -97,27 +103,35 @@ export default function ScanPage() {
     <div className="max-w-3xl mx-auto space-y-6">
       <header>
         <h1 className="text-3xl font-bold gradient-text">Scan &amp; Import</h1>
-        <p className="text-gray-400 text-sm mt-1">Upload a screenshot, a PDF statement, or a CSV export — the AI reads it and logs your positions.</p>
+        <p className="text-gray-400 text-sm mt-1">Upload a screenshot, PDF statement, or CSV — the AI reads it and logs your real holdings.</p>
       </header>
 
-      <div className="card p-6">
+      <div className="card p-6 space-y-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="text-sm text-gray-300 flex items-center gap-2">Account
+            <select className="input w-auto" value={account} onChange={(e) => setAccount(e.target.value)}>{ACCOUNTS.map((a) => <option key={a}>{a}</option>)}</select>
+          </label>
+          <label className="text-sm text-gray-300 flex items-center gap-2 ml-auto">
+            <input type="checkbox" checked={replaceAll} onChange={(e) => setReplaceAll(e.target.checked)} className="accent-violet-500 w-4 h-4" />
+            Replace all real holdings
+          </label>
+        </div>
         <label className="block">
           <span className="text-sm text-gray-200">Upload a photo, PDF, or CSV</span>
-          <input type="file" accept="image/*,.pdf,.csv,.txt" onChange={handleFile} disabled={busy}
-            className="mt-2 block w-full text-sm text-gray-400 file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-600 file:px-4 file:py-2 file:text-white hover:file:bg-emerald-500" />
+          <input type="file" accept="image/*,.pdf,.csv,.txt" onChange={handleFile} disabled={busy} className="mt-2 block w-full text-sm text-gray-400 file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-600 file:px-4 file:py-2 file:text-white hover:file:bg-emerald-500" />
         </label>
-        {busy && <p className="text-pink-300 text-sm mt-3">Reading file…</p>}
-        {error && <p className="text-red-400 text-sm mt-3">⚠ {error}</p>}
-        {preview && <img src={preview} alt="preview" className="mt-4 max-h-48 rounded-lg border border-gray-800" />}
-        {fileName && !preview && <p className="mt-3 text-sm text-gray-300">📄 {fileName}</p>}
+        {replaceAll && <p className="text-xs text-amber-300">⚠ This will delete your current Real open holdings and import this file fresh.</p>}
+        {busy && <p className="text-pink-300 text-sm">Working…</p>}
+        {error && <p className="text-red-400 text-sm">⚠ {error}</p>}
+        {preview && <img src={preview} alt="preview" className="mt-2 max-h-48 rounded-lg border border-white/10" />}
+        {fileName && !preview && <p className="text-sm text-gray-300">📄 {fileName}</p>}
       </div>
 
-      {added > 0 && <div className="card p-4 text-emerald-300 text-sm">✓ Added {added} position(s) to your journal. Check the Dashboard.</div>}
+      {added > 0 && <div className="card p-4 text-emerald-300 text-sm">✓ Imported {added} position(s) into {account}. Check the Dashboard (Real view).</div>}
 
       {positions.length > 0 && (
         <div className="card p-6 space-y-4">
-          <h2 className="font-semibold">Review before adding</h2>
-          <p className="text-xs text-gray-400">Check each row against your file and fix anything the AI misread.</p>
+          <h2 className="font-semibold">Review before adding to {account}</h2>
           <div className="space-y-2">
             {positions.map((p, i) => (
               <div key={i} className="grid grid-cols-12 gap-2 items-center">
@@ -130,7 +144,7 @@ export default function ScanPage() {
               </div>
             ))}
           </div>
-          <button onClick={addAll} disabled={busy} className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-lg px-5 py-2.5 font-medium">{busy ? "Adding…" : "Add all to journal"}</button>
+          <button onClick={addAll} disabled={busy} className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-lg px-5 py-2.5 font-medium">{busy ? "Adding…" : (replaceAll ? "Replace & import" : "Add all to " + account)}</button>
         </div>
       )}
     </div>

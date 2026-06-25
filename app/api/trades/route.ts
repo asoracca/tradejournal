@@ -15,13 +15,14 @@ export async function POST(req: NextRequest) {
   const ticker = String(body.ticker).toUpperCase();
   const type = body.type, side = body.side;
   const mode = body.mode === "REAL" ? "REAL" : "PAPER";
+  const account = body.account || "Individual";
   const qty = Number(body.quantity), entry = Number(body.entryPrice);
   const optionType = body.optionType ?? null;
   const strike = body.strike ? Number(body.strike) : null;
   const expiration = body.expiration ?? null;
 
   const existing = await prisma.trade.findFirst({
-    where: { ticker, type, side, mode, status: "OPEN", ...(type === "OPTION" ? { optionType, strike, expiration } : {}) },
+    where: { ticker, type, side, mode, account, status: "OPEN", ...(type === "OPTION" ? { optionType, strike, expiration } : {}) },
   });
 
   if (existing) {
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
 
   const trade = await prisma.trade.create({
     data: {
-      ticker, type, side, mode, quantity: qty, entryPrice: entry,
+      ticker, type, side, mode, account, quantity: qty, entryPrice: entry,
       stopLoss: numOrNull(body.stopLoss), target: numOrNull(body.target), tradeDate: dateOrNull(body.tradeDate),
       optionType, strike, expiration,
       strategy: body.strategy ?? null, notes: body.notes ?? null, emotion: body.emotion ?? null, rulesFollowed: body.rulesFollowed ?? true,

@@ -22,6 +22,7 @@ model Trade {
   target        Float?
   status        String     @default("OPEN")
   mode          String     @default("PAPER")
+  account       String     @default("Individual")
   optionType    String?
   strike        Float?
   expiration    String?

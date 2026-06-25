@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../lib/db";
 
 const numOrNull = (v: unknown) => (v == null || v === "" ? null : Number(v));
+const dateOrNull = (v: unknown) => { if (!v) return null; const d = new Date(String(v)); return isNaN(d.getTime()) ? null : d; };
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const trade = await prisma.trade.findUnique({ where: { id: params.id }, include: { aiComment: true } });
@@ -20,7 +21,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (body.exitPrice !== undefined) data.exitPrice = numOrNull(body.exitPrice);
   if (body.stopLoss !== undefined) data.stopLoss = numOrNull(body.stopLoss);
   if (body.target !== undefined) data.target = numOrNull(body.target);
+  if (body.tradeDate !== undefined) data.tradeDate = dateOrNull(body.tradeDate);
   if (body.mode !== undefined) data.mode = body.mode === "REAL" ? "REAL" : "PAPER";
+  if (body.account !== undefined) data.account = body.account || "Individual";
   if (body.status !== undefined) data.status = body.status;
   if (body.optionType !== undefined) data.optionType = body.optionType || null;
   if (body.strike !== undefined) data.strike = body.strike ? Number(body.strike) : null;
