@@ -100,12 +100,8 @@ export function getRepresentatives(trades: ParsedCongressTrade[]): string[] {
 }
 
 /**
- * Reconstruct an approximate share-count portfolio for one representative
- * using FIFO logic and amount-range midpoints to estimate share counts.
- *
- * This is intentionally simple — see PLAN.md Phase 2 for the full
- * implementation prompt (needs historical prices at transaction date to
- * convert dollar amounts to share counts).
+ * Filter trade records for one representative and sort by transaction date,
+ * oldest first. This does not reconstruct holdings or estimate share counts.
  */
 export function getTradesForRepresentative(
   trades: ParsedCongressTrade[],
