@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, CartesianGrid } from "recharts";
 import { Blobfish } from "../../blobfish";
 
@@ -21,7 +22,8 @@ function riskInfo(t: Trade): { score: number; reason: string } {
   return { score: Math.min(s, 4), reason };
 }
 
-export default function TradeDetail({ params }: { params: { id: string } }) {
+export default function TradeDetail() {
+  const params = useParams<{ id: string }>();
   const [trade, setTrade] = useState<Trade | null>(null);
   const [historySource, setHistorySource] = useState("unavailable");
   const [hist, setHist] = useState<Hist[]>([]);

@@ -1,6 +1,6 @@
 # TradeGoons
 
-A private, multi-user paper-trading journal built with Next.js 14, React 18, TypeScript and PostgreSQL. It records trades, closes positions, calculates P&L, previews CSV imports and offers optional Gemini coaching. It does not place brokerage orders.
+A private, multi-user paper-trading journal built with Next.js 15.5, React 18, TypeScript and PostgreSQL. It records trades, closes positions, calculates P&L, previews CSV imports and offers optional Gemini coaching. It does not place brokerage orders.
 
 ## Run the offline demo
 
@@ -51,7 +51,7 @@ React forms → authenticated Next.js route handlers → reusable Zod contracts 
 - Synthetic quotes and history are fixed, prominently labeled demo inputs. `MARKET_DATA_MODE=live` opts into unofficial Yahoo endpoints; quotes carry source, timestamp and stale status. Missing marks are reported as incomplete; underlying stock quotes never value options. News/options/disclosure lists are empty offline. External endpoints are not guaranteed.
 - Gemini is optional. Set `GEMINI_API_KEY` to enable educational commentary, analysis, chat and file extraction. Those features send submitted trade/file context to Google. Without a key they perform no Gemini request and the journal works normally. They do not provide buy/sell recommendations or price predictions.
 - Local credentials use NextAuth v4, scrypt and short-lived encrypted sessions. Accounts are provisioned locally; there is no public registration, password recovery or MFA. A database-backed per-account attempt limit is included; internet-facing deployment also requires edge rate limiting and operational monitoring.
-- The retained Next.js 14 baseline and some dependencies have published security advisories. This branch is a local demonstration, **not cleared for public deployment**. Upgrade and revalidate the framework before hosting it.
+- The framework uses the patched Next.js 15.5 maintenance release, retaining React 18. Run `npm audit` and the validation suite before each release; an audit is not a complete security assessment.
 
 CSV import accepts `ticker,type,side,quantity,entryPrice` plus optional trade fields. Preview reports every row error; commit rejects the entire batch if any row is invalid. An account-scoped hash of normalized row contents skips identical rows across retries/files; edit a field if a second otherwise-identical lot is intentional. Deleting a row permits reimport. Exports contain your trades/comments only and prefix potentially active spreadsheet text with an apostrophe. Export includes closed-state fields, so it is an audit export, not a round-trip import format.
 
