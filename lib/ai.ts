@@ -19,7 +19,7 @@ async function buildContext(trade: TradeContext): Promise<string> {
   const parts: string[] = [];
   try {
     const quote = await getQuote(trade.ticker);
-    parts.push("Current price: $" + quote.price.toFixed(2) + " (" + (quote.changePercent >= 0 ? "+" : "") + quote.changePercent.toFixed(2) + "% today)");
+    parts.push((quote.source === "synthetic" ? "Synthetic demo price (not market data)" : quote.stale ? "Stale last-known price" : "Provider price") + ": $" + quote.price.toFixed(2) + " (" + (quote.changePercent >= 0 ? "+" : "") + quote.changePercent.toFixed(2) + "% today)");
     const history = await getHistory(trade.ticker, "1mo");
     if (history.length > 5) {
       const change1m = ((history[history.length - 1].close - history[0].close) / history[0].close) * 100;
@@ -40,6 +40,7 @@ async function buildContext(trade: TradeContext): Promise<string> {
 }
 
 export async function generateTradeComment(trade: TradeContext): Promise<string> {
+  if (!process.env.GEMINI_API_KEY) return "AI disabled. Paper trade recorded.";
   const context = await buildContext(trade);
   const tradeDescription =
     trade.type === "OPTION"
@@ -56,6 +57,7 @@ export async function generateTradeComment(trade: TradeContext): Promise<string>
   const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=" + apiKey;
   const res = await fetch(url, {
     method: "POST",
+    signal: AbortSignal.timeout(8000),
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: systemPrompt }] },

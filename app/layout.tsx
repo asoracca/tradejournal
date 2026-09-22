@@ -1,6 +1,7 @@
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
+import { AccountMenu } from "./account-menu";
 
 export const metadata: Metadata = {
   title: "TradeGoons",
@@ -27,7 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Link href="/options" className="text-sm text-white/70 hover:text-violet-300 shrink-0">Options</Link>
           <Link href="/scan" className="text-sm text-white/70 hover:text-violet-300 shrink-0">Scan</Link>
           <Link href="/learn" className="text-sm text-white/70 hover:text-violet-300 shrink-0">Learn</Link>
-        </nav>
+        <Link href="/import" className="text-sm">CSV</Link><AccountMenu /></nav>
         <main className="p-4 sm:p-6">{children}</main>
       </body>
     </html>

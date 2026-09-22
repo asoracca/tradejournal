@@ -5,7 +5,7 @@ import Link from "next/link";
 
 type Trade = { id: string; ticker: string; type: string; side: string; quantity: number; entryPrice: number; exitPrice: number | null; status: string; mode: string; createdAt: string; tradeDate: string | null };
 
-function fmtDate(t: Trade) { try { return new Date(t.tradeDate || t.createdAt).toLocaleDateString(); } catch { return ""; } }
+function fmtDate(t: Trade) { try { return new Date(t.tradeDate || t.createdAt).toLocaleDateString(undefined, t.tradeDate ? { timeZone: "UTC" } : undefined); } catch { return ""; } }
 
 export default function TradesPage() {
   const [trades, setTrades] = useState<Trade[]>([]);

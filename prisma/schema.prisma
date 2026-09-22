@@ -9,22 +9,29 @@ datasource db {
 }
 
 model Trade {
+  userId String
+  user User @relation(fields: [userId], references: [id])
+  importKey String?
+  closedAt DateTime?
+  @@unique([id, userId])
+  @@unique([userId, importKey])
+  @@index([userId, status, createdAt])
   id            String     @id @default(cuid())
   createdAt     DateTime   @default(now())
   tradeDate     DateTime?
   ticker        String
   type          String
   side          String
-  quantity      Float
-  entryPrice    Float
-  exitPrice     Float?
-  stopLoss      Float?
-  target        Float?
+  quantity      Decimal @db.Decimal(20, 6)
+  entryPrice    Decimal @db.Decimal(20, 6)
+  exitPrice     Decimal? @db.Decimal(20, 6)
+  stopLoss      Decimal? @db.Decimal(20, 6)
+  target        Decimal? @db.Decimal(20, 6)
   status        String     @default("OPEN")
   mode          String     @default("PAPER")
   account       String     @default("Individual")
   optionType    String?
-  strike        Float?
+  strike        Decimal? @db.Decimal(20, 6)
   expiration    String?
   strategy      String?
   notes         String?
@@ -34,11 +41,15 @@ model Trade {
 }
 
 model AiComment {
+  @@unique([tradeId, userId])
+  userId String
+  user User @relation(fields: [userId], references: [id])
+  @@index([userId])
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
   text      String
   tradeId   String   @unique
-  trade     Trade    @relation(fields: [tradeId], references: [id])
+  trade     Trade    @relation(fields: [tradeId, userId], references: [id, userId], onDelete: Cascade)
 }
 
 model CongressTrade {
@@ -47,14 +58,36 @@ model CongressTrade {
   ticker          String
   transactionDate String
   type            String
-  amountLow       Float?
-  amountHigh      Float?
+  amountLow       Decimal? @db.Decimal(20, 6)
+  amountHigh      Decimal? @db.Decimal(20, 6)
 }
 
 model Asset {
+  userId String
+  user User @relation(fields: [userId], references: [id])
+  @@unique([id, userId])
+  @@index([userId, createdAt])
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
   name      String
   category  String
-  value     Float
+  value     Decimal @db.Decimal(20, 6)
+}
+
+model User {
+  id String @id @default(cuid())
+  email String @unique
+  passwordHash String
+  readOnly Boolean @default(false)
+  disabled Boolean @default(false)
+  trades Trade[]
+  comments AiComment[]
+  assets Asset[]
+}
+
+model LoginAttempt {
+ key String @id
+ attempts Int @default(1)
+ expiresAt DateTime
+ @@index([expiresAt])
 }

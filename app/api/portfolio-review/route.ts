@@ -1,7 +1,10 @@
+import { api, body } from "../../../lib/http";
+import { requireUser } from "../../../lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 
-export async function POST(req: NextRequest) {
-  const { summary } = await req.json();
+export function POST(req: NextRequest) { return api(async () => {
+  await requireUser();
+  const { summary } = await body(req);
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return NextResponse.json({ review: "Add GEMINI_API_KEY in Vercel for the AI portfolio review." });
 
@@ -10,6 +13,7 @@ export async function POST(req: NextRequest) {
   const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=" + apiKey;
   const res = await fetch(url, {
     method: "POST",
+    signal: AbortSignal.timeout(8000),
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: systemPrompt }] },
@@ -17,8 +21,8 @@ export async function POST(req: NextRequest) {
       generationConfig: { maxOutputTokens: 800, temperature: 0.8, thinkingConfig: { thinkingBudget: 0 } },
     }),
   });
-  if (!res.ok) { const t = await res.text(); return NextResponse.json({ review: "Review unavailable: " + t.slice(0, 150) }); }
+  if (!res.ok) { const t = await res.text(); return NextResponse.json({ review: "AI provider unavailable." }); }
   const data = await res.json();
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
   return NextResponse.json({ review: text || "No review generated." });
-}
+}); }

@@ -23,6 +23,7 @@ function riskInfo(t: Trade): { score: number; reason: string } {
 
 export default function TradeDetail({ params }: { params: { id: string } }) {
   const [trade, setTrade] = useState<Trade | null>(null);
+  const [historySource, setHistorySource] = useState("unavailable");
   const [hist, setHist] = useState<Hist[]>([]);
   const [news, setNews] = useState<News[]>([]);
   const [analysis, setAnalysis] = useState<string>("");
@@ -44,14 +45,17 @@ export default function TradeDetail({ params }: { params: { id: string } }) {
         if (!active) return;
         if (t.error) { setErr("Trade not found"); setLoadingA(false); return; }
         setTrade(t);
-        const h = await (await fetch("/api/history?ticker=" + encodeURIComponent(t.ticker) + "&range=6mo")).json().catch(() => []);
+        const historyResponse = await fetch("/api/history?ticker=" + encodeURIComponent(t.ticker) + "&range=6mo");
+        const source=historyResponse.headers.get("X-Data-Source")||"unavailable";
+        if(active)setHistorySource(source);
+        const h = await historyResponse.json().catch(() => []);
         const hh = Array.isArray(h) ? h : [];
         if (active) setHist(hh);
         fetch("/api/news?ticker=" + encodeURIComponent(t.ticker)).then((r) => r.json()).then((d) => { if (active) setNews(d.news || []); }).catch(() => {});
         let trend = "";
         if (hh.length > 2) {
           const first = hh[0].close, last = hh[hh.length - 1].close;
-          trend = "Over ~6 months the price moved from $" + first.toFixed(2) + " to $" + last.toFixed(2) + " (" + (((last - first) / first) * 100).toFixed(1) + "%).";
+          trend = source + " underlying price series moved from $" + first.toFixed(2) + " to $" + last.toFixed(2) + " (" + (((last - first) / first) * 100).toFixed(1) + "%).";
         }
         const summary = "Trade: " + t.side + " " + t.quantity + " " + t.ticker + " (" + t.type + ") at $" + t.entryPrice + ". " +
           (t.exitPrice != null ? "Closed at $" + t.exitPrice + "." : "Still open.") +
@@ -99,7 +103,7 @@ export default function TradeDetail({ params }: { params: { id: string } }) {
       </div>
 
       <div className="card p-5">
-        <h2 className="text-sm uppercase tracking-wide text-gray-500 mb-4">6-Month Price · entry &amp; exit marked</h2>
+        <h2 className="text-sm uppercase tracking-wide text-gray-500 mb-4">Underlying price history · {historySource}</h2>
         {hist.length > 1 ? (
           <ResponsiveContainer width="100%" height={280}>
             <LineChart data={hist} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
@@ -108,8 +112,8 @@ export default function TradeDetail({ params }: { params: { id: string } }) {
               <YAxis domain={["auto", "auto"]} tick={{ fontSize: 10, fill: "#6b7280" }} width={48} />
               <Tooltip contentStyle={{ background: "#0b0b12", border: "1px solid #1f2937", fontSize: 12, borderRadius: 8 }} />
               <Line type="monotone" dataKey="close" stroke="#34d399" dot={false} strokeWidth={2} />
-              <ReferenceLine y={trade.entryPrice} stroke="#38bdf8" strokeDasharray="4 4" label={{ value: "Entry", fill: "#38bdf8", fontSize: 10, position: "insideTopLeft" }} />
-              {trade.exitPrice != null && <ReferenceLine y={trade.exitPrice} stroke="#f59e0b" strokeDasharray="4 4" label={{ value: "Exit", fill: "#f59e0b", fontSize: 10, position: "insideBottomLeft" }} />}
+              {trade.type === "STOCK" && <ReferenceLine y={trade.entryPrice} stroke="#38bdf8" strokeDasharray="4 4" label={{ value: "Entry", fill: "#38bdf8", fontSize: 10, position: "insideTopLeft" }} />}
+              {trade.type === "STOCK" && trade.exitPrice != null && <ReferenceLine y={trade.exitPrice} stroke="#f59e0b" strokeDasharray="4 4" label={{ value: "Exit", fill: "#f59e0b", fontSize: 10, position: "insideBottomLeft" }} />}
             </LineChart>
           </ResponsiveContainer>
         ) : <p className="text-gray-500 text-sm">No price history available for {trade.ticker}.</p>}

@@ -43,6 +43,7 @@ export interface ParsedCongressTrade {
  */
 export async function fetchHouseStockWatcherData(): Promise<RawCongressTransaction[]> {
   const res = await fetch(HOUSE_STOCK_WATCHER_URL, {
+    signal: AbortSignal.timeout(4000),
     next: { revalidate: 86400 }, // daily
   });
   if (!res.ok) {

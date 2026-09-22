@@ -18,16 +18,20 @@ export interface Quote {
   previousClose: number;
   changePercent: number;
   currency: string;
+  source?: "synthetic" | "live";
+  stale?: boolean;
+  unavailableReason?: string;
   marketTime: number; // unix timestamp
 }
 
 /**
  * Get the latest price for a ticker.
  */
-export async function getQuote(ticker: string): Promise<Quote> {
+async function liveQuote(ticker: string): Promise<Quote> {
   const url = `${YF_CHART_URL}/${encodeURIComponent(ticker)}?interval=1d&range=1d`;
   const res = await fetch(url, {
     headers: { "User-Agent": "Mozilla/5.0" },
+    signal: AbortSignal.timeout(4000),
     // Yahoo data is fine to cache briefly to avoid hammering the endpoint
     next: { revalidate: 30 },
   });
@@ -66,9 +70,11 @@ export async function getHistory(
   ticker: string,
   range: string = "6mo"
 ): Promise<{ date: string; close: number }[]> {
-  const url = `${YF_CHART_URL}/${encodeURIComponent(ticker)}?interval=1d&range=${range}`;
+  if (process.env.MARKET_DATA_MODE !== "live") return Array.from({length:30}, (_,i) => ({date: new Date(Date.UTC(2026,0,i+1)).toISOString().slice(0,10),close:100+i/3}));
+  const url = `${YF_CHART_URL}/${encodeURIComponent(ticker)}?interval=1d&range=${encodeURIComponent(range)}`;
   const res = await fetch(url, {
     headers: { "User-Agent": "Mozilla/5.0" },
+    signal: AbortSignal.timeout(4000),
     next: { revalidate: 3600 },
   });
 
@@ -120,11 +126,13 @@ export async function getOptionsChain(
   ticker: string,
   expiration?: number
 ): Promise<OptionsChain> {
+  if (process.env.MARKET_DATA_MODE !== "live") return {underlyingPrice:110,expirationDates:[],calls:[],puts:[]};
   let url = `${YF_OPTIONS_URL}/${encodeURIComponent(ticker)}`;
   if (expiration) url += `?date=${expiration}`;
 
   const res = await fetch(url, {
     headers: { "User-Agent": "Mozilla/5.0" },
+    signal: AbortSignal.timeout(4000),
     next: { revalidate: 60 },
   });
 
@@ -170,3 +178,28 @@ export async function getRealizedVol(ticker: string): Promise<number | null> {
 
   return dailyStd * Math.sqrt(252); // annualized
 }
+
+// Synthetic inputs are deliberately fixed, unrelated to real security prices.
+export function syntheticQuote(ticker: string): Quote {
+  return {ticker:ticker.toUpperCase(),price:110,previousClose:108,changePercent:100*(110-108)/108,currency:"USD",marketTime:1769817600,source:"synthetic",stale:false};
+}
+export function quoteAdapter(provider: (ticker:string)=>Promise<Quote>, now=Date.now, timeoutMs=4500) {
+  const cache = new Map<string,{quote:Quote; fetched:number}>();
+  return async (ticker:string):Promise<Quote> => {
+    const key=ticker.toUpperCase(); const previous=cache.get(key);
+    if (previous && now()-previous.fetched < 30000) return previous.quote;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const quote=await Promise.race([provider(key),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(Error("Market data timed out")),timeoutMs);})]);
+      if (!Number.isFinite(quote.price) || quote.price <= 0 || !Number.isFinite(quote.marketTime)) throw Error("Invalid market data");
+      const result={...quote,source:"live" as const,stale:now()-quote.marketTime*1000>15*60*1000};
+      if(cache.size>=500) cache.delete(cache.keys().next().value!);
+      cache.set(key,{quote:result,fetched:now()}); return result;
+    } catch {
+      if(previous) return {...previous.quote,stale:true,unavailableReason:"Provider unavailable; last cached quote shown."};
+      throw Error("Market data unavailable; no cached quote.");
+    } finally {clearTimeout(timer);}
+  };
+}
+const cachedLiveQuote=quoteAdapter(liveQuote);
+export async function getQuote(ticker:string) { return process.env.MARKET_DATA_MODE === "live" ? cachedLiveQuote(ticker) : syntheticQuote(ticker); }

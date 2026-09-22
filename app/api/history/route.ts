@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
   if (!ticker) return NextResponse.json({ error: "ticker required" }, { status: 400 });
   try {
     const history = await getHistory(ticker, range);
-    return NextResponse.json(history);
+    return NextResponse.json(history, {headers:{"X-Data-Source":process.env.MARKET_DATA_MODE === "live" ? "historical" : "synthetic"}});
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   }

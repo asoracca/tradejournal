@@ -1,7 +1,10 @@
+import { api, body } from "../../../lib/http";
+import { requireUser } from "../../../lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 
-export async function POST(req: NextRequest) {
-  const { imageBase64, mimeType, text } = await req.json();
+export function POST(req: NextRequest) { return api(async () => {
+  await requireUser();
+  const { imageBase64, mimeType, text } = await body(req);
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY not set in Vercel" }, { status: 400 });
   if (!imageBase64 && !text) return NextResponse.json({ error: "No file provided" }, { status: 400 });
@@ -42,6 +45,7 @@ export async function POST(req: NextRequest) {
   const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=" + apiKey;
   const res = await fetch(url, {
     method: "POST",
+    signal: AbortSignal.timeout(8000),
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       contents: [{ role: "user", parts }],
@@ -51,7 +55,7 @@ export async function POST(req: NextRequest) {
 
   if (!res.ok) {
     const t = await res.text();
-    return NextResponse.json({ error: "Gemini " + res.status + ": " + t.slice(0, 300) }, { status: 500 });
+    return NextResponse.json({ error: "AI provider unavailable." }, { status: 500 });
   }
 
   const data = await res.json();
@@ -68,4 +72,4 @@ export async function POST(req: NextRequest) {
   })).filter((p) => p.ticker);
 
   return NextResponse.json({ positions });
-}
+}); }

@@ -1,41 +1,21 @@
-import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "../../../../lib/db";
-
-const numOrNull = (v: unknown) => (v == null || v === "" ? null : Number(v));
-const dateOrNull = (v: unknown) => { if (!v) return null; const d = new Date(String(v)); return isNaN(d.getTime()) ? null : d; };
-
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
-  const trade = await prisma.trade.findUnique({ where: { id: params.id }, include: { aiComment: true } });
-  if (!trade) return NextResponse.json({ error: "not found" }, { status: 404 });
-  return NextResponse.json(trade);
+import { api, body, mutationOrigin } from "../../../../lib/http";
+import { requireUser } from "../../../../lib/auth";
+import { readTrade, updateTrade, deleteTrade } from "../../../../lib/trades";
+type Context = { params: { id: string } };
+export const dynamic = "force-dynamic";
+export function GET(_req: Request, { params }: Context) {
+  return api(async () => readTrade((await requireUser()).id, params.id));
 }
-
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const body = await req.json();
-  const data: Record<string, unknown> = {};
-  if (body.ticker !== undefined) data.ticker = String(body.ticker).toUpperCase();
-  if (body.type !== undefined) data.type = body.type;
-  if (body.side !== undefined) data.side = body.side;
-  if (body.quantity !== undefined) data.quantity = Number(body.quantity);
-  if (body.entryPrice !== undefined) data.entryPrice = Number(body.entryPrice);
-  if (body.exitPrice !== undefined) data.exitPrice = numOrNull(body.exitPrice);
-  if (body.stopLoss !== undefined) data.stopLoss = numOrNull(body.stopLoss);
-  if (body.target !== undefined) data.target = numOrNull(body.target);
-  if (body.tradeDate !== undefined) data.tradeDate = dateOrNull(body.tradeDate);
-  if (body.mode !== undefined) data.mode = body.mode === "REAL" ? "REAL" : "PAPER";
-  if (body.account !== undefined) data.account = body.account || "Individual";
-  if (body.status !== undefined) data.status = body.status;
-  if (body.optionType !== undefined) data.optionType = body.optionType || null;
-  if (body.strike !== undefined) data.strike = body.strike ? Number(body.strike) : null;
-  if (body.expiration !== undefined) data.expiration = body.expiration || null;
-  if (body.strategy !== undefined) data.strategy = body.strategy || null;
-  if (body.notes !== undefined) data.notes = body.notes;
-  const trade = await prisma.trade.update({ where: { id: params.id }, data });
-  return NextResponse.json(trade);
+export function PATCH(req: Request, { params }: Context) {
+  return api(async () => {
+    const user = await requireUser(true);
+    return updateTrade(user.id, params.id, await body(req));
+  });
 }
-
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
-  await prisma.aiComment.deleteMany({ where: { tradeId: params.id } });
-  const trade = await prisma.trade.delete({ where: { id: params.id } });
-  return NextResponse.json(trade);
+export function DELETE(req: Request, { params }: Context) {
+  return api(async () => {
+    const user = await requireUser(true);
+    mutationOrigin(req);
+    return deleteTrade(user.id, params.id);
+  });
 }

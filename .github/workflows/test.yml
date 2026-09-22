@@ -1,0 +1,48 @@
+name: Validate paper trading
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: disposable-ci-only
+          POSTGRES_DB: tradegoons_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DIRECT_URL: postgresql://postgres:disposable-ci-only@127.0.0.1:5432/tradegoons_test?schema=public
+      DATABASE_URL: postgresql://tradegoons_app:disposable-app-only@127.0.0.1:5432/tradegoons_test?schema=public
+      NEXTAUTH_URL: http://127.0.0.1:3000
+      NEXTAUTH_SECRET: ci-only-ephemeral-session-secret-not-for-deployment
+      MARKET_DATA_MODE: synthetic
+      GEMINI_API_KEY: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Create unprivileged application role
+        run: psql "${DIRECT_URL%%\?*}" -c "CREATE ROLE tradegoons_app LOGIN PASSWORD 'disposable-app-only' NOSUPERUSER NOCREATEDB NOCREATEROLE;"
+      - run: npm run db:migrate && npm run db:grant-demo && npm run db:seed
+      - run: npm run typecheck && npm run lint && npm test && npm run test:integration && npm run test:migrations
+      - run: npm run build
+      - name: Browser tests against production build
+        run: |
+          npm run start -- --hostname 127.0.0.1 > /tmp/tradegoons-app.log 2>&1 &
+          trap 'kill $!' EXIT
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:3000/login >/dev/null && break; sleep 1; done
+          npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-results
+          path: test-results/

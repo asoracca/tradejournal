@@ -1,7 +1,9 @@
+export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { fetchHouseStockWatcherData, parseTransactions, getRepresentatives, getTradesForRepresentative } from "../../../lib/congress";
 
 export async function GET(req: NextRequest) {
+  if (process.env.MARKET_DATA_MODE !== "live") return NextResponse.json({representatives:[],trades:[],source:"synthetic"});
   const representative = req.nextUrl.searchParams.get("representative");
 
   try {

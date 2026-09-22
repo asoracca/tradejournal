@@ -63,7 +63,7 @@ export default function ReviewPage() {
           </div>
 
           <div className="card p-5">
-            <h2 className="text-sm uppercase tracking-wide text-gray-400 mb-3">🤖 The AI's take</h2>
+            <h2 className="text-sm uppercase tracking-wide text-gray-400 mb-3">🤖 The AI&apos;s take</h2>
             {loading ? <p className="text-pink-300 text-sm">Reviewing your whole book…</p> : err ? <p className="text-red-400 text-sm">{err}</p> : <div className="text-sm text-gray-200 leading-relaxed whitespace-pre-line">{review}</div>}
           </div>
         </>
