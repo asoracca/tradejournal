@@ -71,7 +71,7 @@ export default function CsvImport() {
         >
           Import valid rows
         </button>
-        <a href="/api/trades/export" className="underline">
+        <a href="/api/trades/export" download="paper-trades.csv" className="underline">
           Export my trades
         </a>
       </div>

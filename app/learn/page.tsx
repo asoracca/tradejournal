@@ -1,3 +1,4 @@
+import Link from "next/link";
 type Item = { title: string; body: string; tag?: string };
 
 const STYLES: Item[] = [
@@ -99,7 +100,7 @@ export default function LearnPage() {
       </section>
 
       <div className="card p-6 text-center">
-        <p className="text-sm text-gray-300">Ready to practice? Open a paper position on the <a href="/" className="text-emerald-400 hover:underline">Dashboard</a> and watch the risk blobfish, or ask the <a href="/coach" className="text-emerald-400 hover:underline">AI Coach</a> anything.</p>
+        <p className="text-sm text-gray-300">Ready to practice? Open a paper position on the <Link href="/" className="text-emerald-400 hover:underline">Dashboard</Link> and watch the risk blobfish, or ask the <Link href="/coach" className="text-emerald-400 hover:underline">AI Coach</Link> anything.</p>
       </div>
     </div>
   );

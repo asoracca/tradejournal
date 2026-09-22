@@ -104,7 +104,7 @@ export default function Dashboard() {
       const r = await fetch("/api/quote?ticker=" + encodeURIComponent(tk));
       if (!r.ok) { setLivePrice(null); return; }
       const q = await r.json();
-      if (typeof q.price === "number") { setLivePrice(q.price); setForm((f) => ({ ...f, entryPrice: f.entryPrice ? f.entryPrice : String(q.price) })); }
+      if (typeof q.price === "number") { setLivePrice(q.price); }
       else setLivePrice(null);
     } catch { setLivePrice(null); } finally { setLookingUp(false); }
   }
