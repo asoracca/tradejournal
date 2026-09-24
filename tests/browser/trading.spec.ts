@@ -51,15 +51,26 @@ test("two users: private trading and denied cross-user requests", async ({
   const trades = await (await a.request.get("/api/trades")).json();
   const trade = trades.find((t: { ticker: string }) => t.ticker === "DEMO");
   expect(trade.aiComment.text).toContain("disabled");
+  await a
+    .getByTestId("position-DEMO")
+    .getByRole("button", { name: "Edit", exact: true })
+    .click();
+  await a.getByLabel("Quantity", { exact: true }).fill("12.5");
+  await a.getByRole("button", { name: "Save Changes", exact: true }).click();
+  await expect(a.getByTestId("position-DEMO")).toContainText("12.5");
+  expect(
+    (await (await a.request.get("/api/trades/" + trade.id)).json()).decimals
+      .quantity,
+  ).toBe("12.500000");
   await a.evaluate(() => window.scrollTo(0, 0));
   await a.screenshot({ path: "test-results/logged-trade.png", fullPage: true });
-  a.once("dialog", (dialog) => dialog.accept("110"));
+  a.once("dialog", (dialog) => dialog.accept("110.005"));
   await a
     .getByTestId("position-DEMO")
     .getByRole("button", { name: "Close", exact: true })
     .click();
   await expect(a.getByTestId("ledger")).toContainText(
-    "Ledger realized: $150.00",
+    "Ledger realized: $175.06",
   );
   await a.evaluate(() => window.scrollTo(0, 0));
   await a.screenshot({
@@ -184,4 +195,43 @@ test("read-only demo and CSV preview in React", async ({ page }) => {
     path: "test-results/csv-validation.png",
     fullPage: true,
   });
+});
+
+test("dashboard distinguishes loading, empty, and service failure", async ({
+  page,
+}) => {
+  await login(page, "synthetic-a");
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/trades", async (route) => {
+    await pending;
+    await route.fulfill({ json: [] });
+  });
+  await page.reload();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Loading paper trades" }),
+  ).toBeVisible();
+  await expect(page.getByText("No open positions yet.")).not.toBeVisible();
+  release();
+  await expect(page.getByText("No open positions yet.")).toBeVisible();
+  await page.unroute("**/api/trades");
+  await page.route("**/api/trades", (route) =>
+    route.fulfill({
+      status: 503,
+      json: {
+        code: "TRADE_SERVICE_UNAVAILABLE",
+        error: "Trade service unavailable. Please retry.",
+      },
+    }),
+  );
+  await page.reload();
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Trade service unavailable" }),
+  ).toBeVisible();
+  await expect(page.getByText("No open positions yet.")).not.toBeVisible();
+  await page.unroute("**/api/trades");
+  await page.reload();
+  await expect(page.getByTestId("position-SYNTH")).toHaveCount(2);
 });

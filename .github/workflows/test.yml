@@ -22,27 +22,49 @@ jobs:
       NEXTAUTH_SECRET: ci-only-ephemeral-session-secret-not-for-deployment
       MARKET_DATA_MODE: synthetic
       GEMINI_API_KEY: ""
+      TRADE_SERVICE_SECRET: ci-only-internal-hmac-secret-at-least-32-characters
+      TRADE_API_URL: http://127.0.0.1:8080
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - name: Create unprivileged application role
         run: psql "${DIRECT_URL%%\?*}" -c "CREATE ROLE tradegoons_app LOGIN PASSWORD 'disposable-app-only' NOSUPERUSER NOCREATEDB NOCREATEROLE;"
       - run: npm run db:migrate && npm run db:grant-demo && npm run db:seed
-      - run: npm run typecheck && npm run lint && npm test && npm run test:integration && npm run test:migrations
-      - run: npm run build
-      - name: Browser tests against production build
+      - run: npm run java:build && npm run java:migrate && npm run java:test
+      - name: Full stack validation against production builds
         run: |
+          npm run java:run > /tmp/tradegoons-java.log 2>&1 &
+          java_pid=$!
+          trap 'kill "$java_pid" "${web_pid:-}" 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8080/health >/dev/null && break; sleep 1; done
+          curl -fsS http://127.0.0.1:8080/health
+          npm run typecheck && npm run lint && npm test && npm run test:integration && npm run test:migrations
+          npm run build
           npm run start -- --hostname 127.0.0.1 > /tmp/tradegoons-app.log 2>&1 &
-          trap 'kill $!' EXIT
+          web_pid=$!
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:3000/login >/dev/null && break; sleep 1; done
           npm run test:e2e
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: browser-results
-          path: test-results/
+          path: |
+            test-results/
+            backend/target/surefire-reports/
+            backend/target/site/jacoco/
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the combined free-demo container without secrets
+        run: docker build -t tradegoons-demo .

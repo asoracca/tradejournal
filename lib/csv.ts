@@ -1,10 +1,7 @@
 import { parse } from "csv-parse/sync";
-import { createHash } from "node:crypto";
-import { createTradeSchema, type TradeInput } from "./contracts";
 import { ApiError } from "./http";
-import { prisma } from "./db";
-import { tradeData } from "./trades";
-export function previewCsv(csv: string) {
+import { tradeApi } from "./trade-api";
+export function parseCsv(csv: string): Record<string, string>[] {
   let records: Record<string, string>[];
   try {
     records = parse(csv, {
@@ -19,67 +16,26 @@ export function previewCsv(csv: string) {
   }
   if (!records.length || records.length > 500)
     throw new ApiError(400, "CSV_SIZE", "Import 1–500 rows at a time.");
-  return records.map((record, index) => {
-    const input = Object.fromEntries(
-      Object.entries(record).filter(([, v]) => v !== ""),
-    );
-    const result = createTradeSchema.safeParse(input);
-    if (!result.success)
-      return {
-        row: index + 2,
-        errors: result.error.issues.map(
-          (i) => i.path.join(".") + ": " + i.message,
-        ),
-      };
-    const data = result.data;
-    const canonical = JSON.stringify(
-      Object.fromEntries(
-        Object.entries(data).sort(([a], [b]) => a.localeCompare(b)),
-      ),
-    );
-    return {
-      row: index + 2,
-      data,
-      key: createHash("sha256").update(canonical).digest("hex"),
-      errors: [] as string[],
-    };
-  });
+  return records.map((record) =>
+    Object.fromEntries(Object.entries(record).filter(([, v]) => v !== "")),
+  );
+}
+export interface ImportResult {
+  rows: {
+    row: number;
+    data?: Record<string, unknown>;
+    errors: string[];
+    duplicate: boolean;
+  }[];
+  imported: number;
 }
 export async function importCsv(userId: string, csv: string, commit: boolean) {
-  const rows = previewCsv(csv);
-  const valid = rows.filter(
-    (
-      r,
-    ): r is { row: number; data: TradeInput; key: string; errors: string[] } =>
-      !!r.data,
+  return tradeApi<ImportResult>(
+    userId,
+    "/v1/imports/" + (commit ? "commit" : "preview"),
+    "POST",
+    parseCsv(csv),
   );
-  const existing = await prisma.trade.findMany({
-    where: { userId, importKey: { in: valid.map((r) => r.key) } },
-    select: { importKey: true },
-  });
-  const seen = new Set(existing.map((t) => t.importKey));
-  const preview = rows.map((r) => {
-    const duplicate = !!r.key && seen.has(r.key);
-    if (r.key) seen.add(r.key);
-    return { ...r, duplicate };
-  });
-  if (!commit) return { rows: preview, imported: 0 };
-  if (rows.some((r) => r.errors.length))
-    throw new ApiError(
-      400,
-      "CSV_VALIDATION",
-      "Fix all preview errors before importing.",
-    );
-  // Database unique(userId,importKey) makes concurrent retries safe as well.
-  const result = await prisma.trade.createMany({
-    data: valid.map((r) => ({
-      ...tradeData(r.data),
-      userId,
-      importKey: r.key,
-    })),
-    skipDuplicates: true,
-  });
-  return { rows: preview, imported: result.count };
 }
 export function csvCell(value: unknown) {
   let text = String(value ?? "");
@@ -88,13 +44,10 @@ export function csvCell(value: unknown) {
   return '"' + text.replace(/"/g, '""') + '"';
 }
 export async function exportCsv(userId: string, id?: string) {
-  const rows = await prisma.trade.findMany({
-    where: { userId, ...(id ? { id } : {}) },
-    orderBy: { createdAt: "asc" },
-    include: { aiComment: true },
-  });
-  if (id && !rows.length)
-    throw new ApiError(404, "NOT_FOUND", "Record not found.");
+  type Row = Record<string, unknown> & { aiComment?: { text: string } };
+  const rows = id
+    ? [await tradeApi<Row>(userId, "/v1/trades/" + encodeURIComponent(id))]
+    : await tradeApi<Row[]>(userId, "/v1/trades");
   const keys = [
     "id",
     "ticker",
@@ -107,7 +60,7 @@ export async function exportCsv(userId: string, id?: string) {
     "mode",
     "account",
     "notes",
-  ] as const;
+  ];
   return [
     keys.join(",") + ",aiComment",
     ...rows.map((t) =>
