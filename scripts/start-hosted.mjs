@@ -7,12 +7,13 @@ if (process.env.DIRECT_URL || process.env.TRADE_MIGRATE === "true")
   throw Error("Migration credentials and startup migrations are not permitted here.");
 const shared = process.env.TRADE_SERVICE_SECRET || randomBytes(32).toString("hex");
 const env = { ...process.env, TRADE_SERVICE_SECRET: shared };
-const ssl = url.searchParams.get("sslmode");
+const localDatabase = ["localhost", "127.0.0.1"].includes(url.hostname);
+const jdbcTls = localDatabase ? "" : "?sslmode=verify-full&sslfactory=org.postgresql.ssl.DefaultJavaSSLFactory";
 const javaEnv = {
   ...env,
   TRADE_API_BIND: "127.0.0.1",
   TRADE_API_PORT: "8080",
-  JDBC_DATABASE_URL: `jdbc:postgresql://${url.host}${url.pathname}${ssl ? "?sslmode=" + ssl : ""}`,
+  JDBC_DATABASE_URL: `jdbc:postgresql://${url.host}${url.pathname}${jdbcTls}`,
   JDBC_DATABASE_USER: decodeURIComponent(url.username),
   JDBC_DATABASE_PASSWORD: decodeURIComponent(url.password),
   SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "2",
