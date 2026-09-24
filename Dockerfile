@@ -1,4 +1,5 @@
 FROM eclipse-temurin:21-jdk-jammy AS java-build
+RUN apt-get update && apt-get install -y --no-install-recommends unzip && rm -rf /var/lib/apt/lists/*
 WORKDIR /build
 COPY backend/pom.xml backend/mvnw ./
 COPY backend/.mvn ./.mvn
