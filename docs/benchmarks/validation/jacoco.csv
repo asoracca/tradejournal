@@ -1,0 +1,15 @@
+GROUP,PACKAGE,CLASS,INSTRUCTION_MISSED,INSTRUCTION_COVERED,BRANCH_MISSED,BRANCH_COVERED,LINE_MISSED,LINE_COVERED,COMPLEXITY_MISSED,COMPLEXITY_COVERED,METHOD_MISSED,METHOD_COVERED
+trade-api,com.tradegoons,ServiceAuthentication.new HttpServletRequestWrapper() {...},10,19,0,0,2,3,1,2,1,2
+trade-api,com.tradegoons,PortfolioService.Request,0,15,0,0,0,1,0,1,0,1
+trade-api,com.tradegoons,ServiceAuthentication.1.new ServletInputStream() {...},14,10,2,0,3,2,4,2,3,2
+trade-api,com.tradegoons,TradeContract,3,484,12,60,0,55,12,30,0,6
+trade-api,com.tradegoons,TradeService,27,854,8,62,2,186,8,47,0,20
+trade-api,com.tradegoons,PortfolioService.Mark,0,9,0,0,0,1,0,1,0,1
+trade-api,com.tradegoons,ServiceAuthentication,59,305,14,28,12,59,13,14,0,6
+trade-api,com.tradegoons,TradeApplication,28,3,2,0,6,1,2,1,1,1
+trade-api,com.tradegoons,TradeService.Inserted,0,9,0,0,0,1,0,1,0,1
+trade-api,com.tradegoons,TradeController,4,126,0,2,1,18,1,14,1,13
+trade-api,com.tradegoons,Errors,27,24,0,0,3,3,3,3,3,3
+trade-api,com.tradegoons,Accounting,0,52,0,6,0,10,0,7,0,4
+trade-api,com.tradegoons,ApiException,0,25,0,0,0,6,0,3,0,3
+trade-api,com.tradegoons,PortfolioService,8,459,4,30,0,85,4,16,0,3

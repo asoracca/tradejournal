@@ -1,11 +1,9 @@
-# Aggregate query plan
+# Owner-scoped portfolio query plan
 
-Run `npx tsx scripts/explain.ts` against seed v1 after `npm run db:seed`. It prints PostgreSQL version, effective application role, row count, parameter inputs and the actual `EXPLAIN (ANALYZE, BUFFERS)` output for `lib/ledger.ts`.
+Run `npx tsx scripts/explain.ts` after the local seed. It executes the same parameterized row selection used by Java `TradeService.portfolioRows`: owner, mode and nullable account filter. Java `BigDecimal` then calculates portfolio totals; the former SQL P&L aggregate has been removed so accounting has one authoritative implementation.
 
-The query binds the user, mode, account filter and JSON price map as parameters. It sums rounded realized/unrealized position P&L and counts unpriced positions. Marks are joined by ticker only for stock valuation; options require a contract quote and are left unpriced. Ownership is a WHERE condition inside SQL, not a JavaScript filter after reading all users' data.
+Flyway adds `(userId, mode, account, status)` alongside the existing ownership indexes. The query never loads another owner's rows for filtering in Java.
 
-The index `(userId, status, createdAt)` begins with the ownership key. PostgreSQL may choose a sequential scan for the six-row seed; an index scan is not inherently faster at this size. This seed validates the plan and semantics, not production throughput. Capture output on the target PostgreSQL version and realistic tenant distribution before making capacity claims.
+Observed September 23, 2026: seed v1, six trades, PostgreSQL 18.4, effective role `tradegoons_app`, owner `synthetic-demo`, mode `PAPER`, account null. PostgreSQL chose a sequential scan, returned two owned rows and removed four. One execution-buffer hit; planning 0.160 ms, execution 0.018 ms. At six rows a sequential scan is reasonable; this is one warm observation, not an index speedup claim. The benchmark separately uses 1,000 rows.
 
-## Observed local run
-
-On September 22, 2026, seed v1 (6 trades), PostgreSQL 18.4 on Darwin, and role `tradegoons_app`, the command above used `synthetic-demo`, `PAPER`, no account filter, and `{"SYNTH":"110"}`. It selected an index scan on `Trade_userId_importKey_key` (its leading column is `userId`), read 2 owned rows, joined 1 mark and aggregated 1 result. Reported planning time was 0.282 ms, execution time 0.081 ms, with 2 shared-buffer hits. This is one warm local observation, not a benchmark or capacity guarantee. The dedicated status/createdAt ownership index also exists; the planner did not select it for this run.
+[Raw plan, parameters, row count and database version](benchmarks/validation/query-plan.json). The plan can change with data distribution and database version. No row-level-security policy is claimed; application ownership predicates and database foreign keys remain mandatory.

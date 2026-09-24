@@ -3,21 +3,84 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, CartesianGrid } from "recharts";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  ReferenceLine,
+  CartesianGrid,
+} from "recharts";
 import { Blobfish } from "../../blobfish";
 
-type Trade = { id: string; ticker: string; type: string; side: string; quantity: number; entryPrice: number; exitPrice: number | null; status: string; createdAt: string; strategy: string | null; notes: string | null; optionType: string | null; strike: number | null; aiComment?: { text: string } | null };
+type Trade = {
+  id: string;
+  ticker: string;
+  type: string;
+  side: string;
+  quantity: number;
+  entryPrice: number;
+  exitPrice: number | null;
+  status: string;
+  realizedPnl: string;
+  createdAt: string;
+  strategy: string | null;
+  notes: string | null;
+  optionType: string | null;
+  strike: number | null;
+  aiComment?: { text: string } | null;
+};
 type Hist = { date: string; close: number };
 type News = { title: string; publisher: string; link: string; time: number };
 
-const LEV3 = ["SOXL", "SOXS", "TQQQ", "SQQQ", "KORU", "UPRO", "SPXL", "SPXU", "TNA", "TZA", "LABU", "LABD", "NUGT", "DUST", "YINN", "YANG", "UDOW", "SDOW", "FNGU", "BULZ", "WEBL", "FAS", "FAZ"];
+const LEV3 = [
+  "SOXL",
+  "SOXS",
+  "TQQQ",
+  "SQQQ",
+  "KORU",
+  "UPRO",
+  "SPXL",
+  "SPXU",
+  "TNA",
+  "TZA",
+  "LABU",
+  "LABD",
+  "NUGT",
+  "DUST",
+  "YINN",
+  "YANG",
+  "UDOW",
+  "SDOW",
+  "FNGU",
+  "BULZ",
+  "WEBL",
+  "FAS",
+  "FAZ",
+];
 
 function riskInfo(t: Trade): { score: number; reason: string } {
   let s = 0.6;
-  let reason = "A standard position — manage it with a stop loss and position sizing.";
-  if (LEV3.includes(t.ticker)) { s += 2.2; reason = t.ticker + " is a 3x leveraged ETF — daily moves are tripled, and it loses value if held through choppy markets. A trading tool, not a buy-and-hold investment."; }
-  if (t.type === "FUTURE") { s += 2.2; reason = "Futures are highly leveraged — a small price move becomes a large dollar swing. Keep size small."; }
-  if (t.type === "OPTION") { s += 1.6; reason = "Options carry leverage and an expiration date — they can expire worthless if the move doesn't happen in time."; }
+  let reason =
+    "A standard position — manage it with a stop loss and position sizing.";
+  if (LEV3.includes(t.ticker)) {
+    s += 2.2;
+    reason =
+      t.ticker +
+      " is a 3x leveraged ETF — daily moves are tripled, and it loses value if held through choppy markets. A trading tool, not a buy-and-hold investment.";
+  }
+  if (t.type === "FUTURE") {
+    s += 2.2;
+    reason =
+      "Futures are highly leveraged — a small price move becomes a large dollar swing. Keep size small.";
+  }
+  if (t.type === "OPTION") {
+    s += 1.6;
+    reason =
+      "Options carry leverage and an expiration date — they can expire worthless if the move doesn't happen in time.";
+  }
   if (t.side === "SELL") s += 0.4;
   return { score: Math.min(s, 4), reason };
 }
@@ -34,7 +97,11 @@ export default function TradeDetail() {
   const blobRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const onScroll = () => { if (blobRef.current) blobRef.current.style.transform = "rotate(" + (window.scrollY * 0.45) + "deg)"; };
+    const onScroll = () => {
+      if (blobRef.current)
+        blobRef.current.style.transform =
+          "rotate(" + window.scrollY * 0.45 + "deg)";
+    };
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
@@ -45,95 +112,324 @@ export default function TradeDetail() {
       try {
         const t = await (await fetch("/api/trades/" + params.id)).json();
         if (!active) return;
-        if (t.error) { setErr("Trade not found"); setLoadingA(false); return; }
+        if (t.error) {
+          setErr(t.error);
+          setLoadingA(false);
+          return;
+        }
         setTrade(t);
-        const historyResponse = await fetch("/api/history?ticker=" + encodeURIComponent(t.ticker) + "&range=6mo");
-        const source=historyResponse.headers.get("X-Data-Source")||"unavailable";
-        if(active)setHistorySource(source);
+        const historyResponse = await fetch(
+          "/api/history?ticker=" + encodeURIComponent(t.ticker) + "&range=6mo",
+        );
+        const source =
+          historyResponse.headers.get("X-Data-Source") || "unavailable";
+        if (active) setHistorySource(source);
         const h = await historyResponse.json().catch(() => []);
         const hh = Array.isArray(h) ? h : [];
         if (active) setHist(hh);
-        fetch("/api/news?ticker=" + encodeURIComponent(t.ticker)).then((r) => r.json()).then((d) => { if (active) setNews(d.news || []); }).catch(() => {});
+        fetch("/api/news?ticker=" + encodeURIComponent(t.ticker))
+          .then((r) => r.json())
+          .then((d) => {
+            if (active) setNews(d.news || []);
+          })
+          .catch(() => {});
         let trend = "";
         if (hh.length > 2) {
-          const first = hh[0].close, last = hh[hh.length - 1].close;
-          trend = source + " underlying price series moved from $" + first.toFixed(2) + " to $" + last.toFixed(2) + " (" + (((last - first) / first) * 100).toFixed(1) + "%).";
+          const first = hh[0].close,
+            last = hh[hh.length - 1].close;
+          trend =
+            source +
+            " underlying price series moved from $" +
+            first.toFixed(2) +
+            " to $" +
+            last.toFixed(2) +
+            " (" +
+            (((last - first) / first) * 100).toFixed(1) +
+            "%).";
         }
-        const summary = "Trade: " + t.side + " " + t.quantity + " " + t.ticker + " (" + t.type + ") at $" + t.entryPrice + ". " +
-          (t.exitPrice != null ? "Closed at $" + t.exitPrice + "." : "Still open.") +
-          " Strategy: " + (t.strategy || "n/a") + ". Notes: " + (t.notes || "none") + ". " + trend;
-        const a = await (await fetch("/api/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ summary }) })).json();
-        if (active) { setAnalysis(a.analysis || ""); setLoadingA(false); }
-      } catch (e) { if (active) { setErr((e as Error).message); setLoadingA(false); } }
+        const summary =
+          "Trade: " +
+          t.side +
+          " " +
+          t.quantity +
+          " " +
+          t.ticker +
+          " (" +
+          t.type +
+          ") at $" +
+          t.entryPrice +
+          ". " +
+          (t.exitPrice != null
+            ? "Closed at $" + t.exitPrice + "."
+            : "Still open.") +
+          " Strategy: " +
+          (t.strategy || "n/a") +
+          ". Notes: " +
+          (t.notes || "none") +
+          ". " +
+          trend;
+        const a = await (
+          await fetch("/api/analyze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ summary }),
+          })
+        ).json();
+        if (active) {
+          setAnalysis(a.analysis || "");
+          setLoadingA(false);
+        }
+      } catch (e) {
+        if (active) {
+          setErr((e as Error).message);
+          setLoadingA(false);
+        }
+      }
     })();
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [params.id]);
 
-  if (err) return <div className="max-w-3xl mx-auto"><Link href="/trades" className="text-emerald-400 text-sm">← Back</Link><p className="text-gray-400 mt-4">{err}.</p></div>;
-  if (!trade) return <div className="max-w-3xl mx-auto text-gray-500">Loading…</div>;
+  if (err)
+    return (
+      <div className="max-w-3xl mx-auto">
+        <Link href="/trades" className="text-emerald-400 text-sm">
+          ← Back
+        </Link>
+        <p className="text-gray-400 mt-4">{err}.</p>
+      </div>
+    );
+  if (!trade)
+    return <div className="max-w-3xl mx-auto text-gray-500">Loading…</div>;
 
   const risk = riskInfo(trade);
-  const riskWord = risk.score < 1 ? "Low risk" : risk.score < 2 ? "Moderate risk" : risk.score < 3 ? "High risk" : "Extreme risk";
-  const riskColor = risk.score < 1 ? "#34d399" : risk.score < 2 ? "#f472b6" : risk.score < 3 ? "#fb7185" : "#ef4444";
-  const pnl = trade.exitPrice != null ? (trade.exitPrice - trade.entryPrice) * trade.quantity * (trade.type === "OPTION" ? 100 : 1) * (trade.side === "BUY" ? 1 : -1) : null;
+  const riskWord =
+    risk.score < 1
+      ? "Low risk"
+      : risk.score < 2
+        ? "Moderate risk"
+        : risk.score < 3
+          ? "High risk"
+          : "Extreme risk";
+  const riskColor =
+    risk.score < 1
+      ? "#34d399"
+      : risk.score < 2
+        ? "#f472b6"
+        : risk.score < 3
+          ? "#fb7185"
+          : "#ef4444";
+  const pnl = trade.exitPrice != null ? Number(trade.realizedPnl) : null;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <Link href="/trades" className="text-emerald-400 text-sm hover:underline">← Back to trades</Link>
+      <Link href="/trades" className="text-emerald-400 text-sm hover:underline">
+        ← Back to trades
+      </Link>
 
       <header className="flex flex-wrap items-end gap-3">
         <h1 className="text-4xl font-bold gradient-text">{trade.ticker}</h1>
-        <span className={"text-xs px-2 py-1 rounded-full " + (trade.side === "BUY" ? "bg-emerald-900/50 text-emerald-300" : "bg-red-900/50 text-red-300")}>{trade.side}</span>
-        <span className="text-xs px-2 py-1 rounded-full bg-gray-800 text-gray-400 uppercase">{trade.type}</span>
-        <span className={"text-xs px-2 py-1 rounded-full " + (trade.status === "OPEN" ? "bg-sky-900/50 text-sky-300" : "bg-gray-800 text-gray-400")}>{trade.status}</span>
+        <span
+          className={
+            "text-xs px-2 py-1 rounded-full " +
+            (trade.side === "BUY"
+              ? "bg-emerald-900/50 text-emerald-300"
+              : "bg-red-900/50 text-red-300")
+          }
+        >
+          {trade.side}
+        </span>
+        <span className="text-xs px-2 py-1 rounded-full bg-gray-800 text-gray-400 uppercase">
+          {trade.type}
+        </span>
+        <span
+          className={
+            "text-xs px-2 py-1 rounded-full " +
+            (trade.status === "OPEN"
+              ? "bg-sky-900/50 text-sky-300"
+              : "bg-gray-800 text-gray-400")
+          }
+        >
+          {trade.status}
+        </span>
       </header>
 
-      <div className="card relative overflow-hidden flex flex-col items-center justify-center text-center py-16 px-6" style={{ minHeight: "60vh" }}>
-        <div ref={blobRef} style={{ transition: "transform 0.08s linear", willChange: "transform" }}>
+      <div
+        className="card relative overflow-hidden flex flex-col items-center justify-center text-center py-16 px-6"
+        style={{ minHeight: "60vh" }}
+      >
+        <div
+          ref={blobRef}
+          style={{
+            transition: "transform 0.08s linear",
+            willChange: "transform",
+          }}
+        >
           <Blobfish level={risk.score} width={440} caption="" />
         </div>
-        <div className="mt-6 text-3xl font-extrabold" style={{ color: riskColor }}>{riskWord}</div>
-        <p className="text-sm text-gray-400 mt-3 max-w-lg leading-relaxed">{risk.reason}</p>
-        <p className="text-xs text-gray-600 mt-4">↓ scroll to spin the blobfish</p>
+        <div
+          className="mt-6 text-3xl font-extrabold"
+          style={{ color: riskColor }}
+        >
+          {riskWord}
+        </div>
+        <p className="text-sm text-gray-400 mt-3 max-w-lg leading-relaxed">
+          {risk.reason}
+        </p>
+        <p className="text-xs text-gray-600 mt-4">
+          ↓ scroll to spin the blobfish
+        </p>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="stat"><div className="text-xs uppercase text-gray-500">Entry</div><div className="text-xl font-bold font-mono mt-1">${trade.entryPrice}</div></div>
-        <div className="stat"><div className="text-xs uppercase text-gray-500">Exit</div><div className="text-xl font-bold font-mono mt-1">{trade.exitPrice != null ? "$" + trade.exitPrice : "—"}</div></div>
-        <div className="stat"><div className="text-xs uppercase text-gray-500">Quantity</div><div className="text-xl font-bold font-mono mt-1">{trade.quantity}</div></div>
-        <div className="stat"><div className="text-xs uppercase text-gray-500">P&L</div><div className={"text-xl font-bold font-mono mt-1 " + (pnl == null ? "text-gray-400" : pnl >= 0 ? "text-emerald-400" : "text-red-400")}>{pnl == null ? "open" : (pnl >= 0 ? "+$" : "-$") + Math.abs(pnl).toFixed(2)}</div></div>
+        <div className="stat">
+          <div className="text-xs uppercase text-gray-500">Entry</div>
+          <div className="text-xl font-bold font-mono mt-1">
+            ${trade.entryPrice}
+          </div>
+        </div>
+        <div className="stat">
+          <div className="text-xs uppercase text-gray-500">Exit</div>
+          <div className="text-xl font-bold font-mono mt-1">
+            {trade.exitPrice != null ? "$" + trade.exitPrice : "—"}
+          </div>
+        </div>
+        <div className="stat">
+          <div className="text-xs uppercase text-gray-500">Quantity</div>
+          <div className="text-xl font-bold font-mono mt-1">
+            {trade.quantity}
+          </div>
+        </div>
+        <div className="stat">
+          <div className="text-xs uppercase text-gray-500">P&L</div>
+          <div
+            className={
+              "text-xl font-bold font-mono mt-1 " +
+              (pnl == null
+                ? "text-gray-400"
+                : pnl >= 0
+                  ? "text-emerald-400"
+                  : "text-red-400")
+            }
+          >
+            {pnl == null
+              ? "open"
+              : (pnl >= 0 ? "+$" : "-$") + trade.realizedPnl.replace(/^-/, "")}
+          </div>
+        </div>
       </div>
 
       <div className="card p-5">
-        <h2 className="text-sm uppercase tracking-wide text-gray-500 mb-4">Underlying price history · {historySource}</h2>
+        <h2 className="text-sm uppercase tracking-wide text-gray-500 mb-4">
+          Underlying price history · {historySource}
+        </h2>
         {hist.length > 1 ? (
           <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={hist} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
+            <LineChart
+              data={hist}
+              margin={{ top: 5, right: 10, bottom: 5, left: 0 }}
+            >
               <CartesianGrid stroke="#1f2937" strokeDasharray="3 3" />
-              <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#6b7280" }} minTickGap={40} />
-              <YAxis domain={["auto", "auto"]} tick={{ fontSize: 10, fill: "#6b7280" }} width={48} />
-              <Tooltip contentStyle={{ background: "#0b0b12", border: "1px solid #1f2937", fontSize: 12, borderRadius: 8 }} />
-              <Line type="monotone" dataKey="close" stroke="#34d399" dot={false} strokeWidth={2} />
-              {trade.type === "STOCK" && <ReferenceLine y={trade.entryPrice} stroke="#38bdf8" strokeDasharray="4 4" label={{ value: "Entry", fill: "#38bdf8", fontSize: 10, position: "insideTopLeft" }} />}
-              {trade.type === "STOCK" && trade.exitPrice != null && <ReferenceLine y={trade.exitPrice} stroke="#f59e0b" strokeDasharray="4 4" label={{ value: "Exit", fill: "#f59e0b", fontSize: 10, position: "insideBottomLeft" }} />}
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 10, fill: "#6b7280" }}
+                minTickGap={40}
+              />
+              <YAxis
+                domain={["auto", "auto"]}
+                tick={{ fontSize: 10, fill: "#6b7280" }}
+                width={48}
+              />
+              <Tooltip
+                contentStyle={{
+                  background: "#0b0b12",
+                  border: "1px solid #1f2937",
+                  fontSize: 12,
+                  borderRadius: 8,
+                }}
+              />
+              <Line
+                type="monotone"
+                dataKey="close"
+                stroke="#34d399"
+                dot={false}
+                strokeWidth={2}
+              />
+              {trade.type === "STOCK" && (
+                <ReferenceLine
+                  y={trade.entryPrice}
+                  stroke="#38bdf8"
+                  strokeDasharray="4 4"
+                  label={{
+                    value: "Entry",
+                    fill: "#38bdf8",
+                    fontSize: 10,
+                    position: "insideTopLeft",
+                  }}
+                />
+              )}
+              {trade.type === "STOCK" && trade.exitPrice != null && (
+                <ReferenceLine
+                  y={trade.exitPrice}
+                  stroke="#f59e0b"
+                  strokeDasharray="4 4"
+                  label={{
+                    value: "Exit",
+                    fill: "#f59e0b",
+                    fontSize: 10,
+                    position: "insideBottomLeft",
+                  }}
+                />
+              )}
             </LineChart>
           </ResponsiveContainer>
-        ) : <p className="text-gray-500 text-sm">No price history available for {trade.ticker}.</p>}
+        ) : (
+          <p className="text-gray-500 text-sm">
+            No price history available for {trade.ticker}.
+          </p>
+        )}
       </div>
 
       <div className="card p-5">
-        <h2 className="text-sm uppercase tracking-wide text-gray-500 mb-3">🤖 Deep AI Analysis</h2>
-        {loadingA ? <p className="text-emerald-400 text-sm">Thinking…</p> : <div className="text-sm text-gray-300 leading-relaxed whitespace-pre-line">{analysis}</div>}
+        <h2 className="text-sm uppercase tracking-wide text-gray-500 mb-3">
+          🤖 Deep AI Analysis
+        </h2>
+        {loadingA ? (
+          <p className="text-emerald-400 text-sm">Thinking…</p>
+        ) : (
+          <div className="text-sm text-gray-300 leading-relaxed whitespace-pre-line">
+            {analysis}
+          </div>
+        )}
       </div>
 
       <div className="card p-5">
-        <h2 className="text-sm uppercase tracking-wide text-gray-500 mb-3">📰 Related News</h2>
-        {news.length === 0 ? <p className="text-gray-500 text-sm">No recent headlines found for {trade.ticker}.</p> : (
+        <h2 className="text-sm uppercase tracking-wide text-gray-500 mb-3">
+          📰 Related News
+        </h2>
+        {news.length === 0 ? (
+          <p className="text-gray-500 text-sm">
+            No recent headlines found for {trade.ticker}.
+          </p>
+        ) : (
           <ul className="space-y-3">
             {news.map((n, i) => (
               <li key={i}>
-                <a href={n.link} target="_blank" rel="noopener noreferrer" className="text-sm text-gray-200 hover:text-emerald-400">{n.title}</a>
-                <div className="text-xs text-gray-600">{n.publisher}{n.time ? " · " + new Date(n.time * 1000).toLocaleDateString() : ""}</div>
+                <a
+                  href={n.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-gray-200 hover:text-emerald-400"
+                >
+                  {n.title}
+                </a>
+                <div className="text-xs text-gray-600">
+                  {n.publisher}
+                  {n.time
+                    ? " · " + new Date(n.time * 1000).toLocaleDateString()
+                    : ""}
+                </div>
               </li>
             ))}
           </ul>

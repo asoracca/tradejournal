@@ -10,6 +10,7 @@ const config = existsSync(path)
       app: randomBytes(24).toString("hex"),
       secret: randomBytes(32).toString("hex"),
     };
+config.serviceSecret ??= randomBytes(32).toString("hex");
 writeFileSync(path, JSON.stringify(config), { mode: 0o600 });
 const pg = new EmbeddedPostgres({
   databaseDir: ".local/postgres",
@@ -43,6 +44,8 @@ writeFileSync(
 DIRECT_URL="${direct}"
 NEXTAUTH_URL="http://127.0.0.1:3000"
 NEXTAUTH_SECRET="${config.secret}"
+TRADE_SERVICE_SECRET="${config.serviceSecret}"
+TRADE_API_URL="http://127.0.0.1:8080"
 MARKET_DATA_MODE="synthetic"
 GEMINI_API_KEY=""
 `,

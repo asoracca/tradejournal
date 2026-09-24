@@ -17,7 +17,11 @@
     "db:migrate": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "db:grant-demo": "tsx scripts/grant-demo.ts",
-    "test:migrations": "tsx scripts/test-migrations.ts"
+    "test:migrations": "tsx scripts/test-migrations.ts",
+    "java:build": "node scripts/java.mjs build",
+    "java:test": "node scripts/java.mjs test",
+    "java:migrate": "node scripts/java.mjs migrate",
+    "java:run": "node scripts/java.mjs run"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",

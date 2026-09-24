@@ -1,30 +1,22 @@
 import { loadEnvConfig } from "@next/env";
-loadEnvConfig(process.cwd());
-import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/db";
-import { aggregateQuery } from "../lib/ledger";
+loadEnvConfig(process.cwd());
 async function main() {
-  const version = await prisma.$queryRaw`SELECT version(), current_user`;
-  const count = await prisma.trade.count();
-  const plan = await prisma.$queryRaw(
-    Prisma.sql`EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT) ${aggregateQuery("synthetic-demo", "PAPER", null, JSON.stringify({ SYNTH: "110" }))}`,
-  );
+  const info =
+    await prisma.$queryRaw`SELECT version(), current_user, (SELECT count(*)::int FROM public."Trade") AS rows`;
+  const plan =
+    await prisma.$queryRaw`EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT) SELECT * FROM public."Trade" WHERE "userId"=${"synthetic-demo"} AND mode=${"PAPER"} AND (CAST(${null} AS text) IS NULL OR account=${null})`;
   console.log(
     JSON.stringify(
-      {
-        seed: "v1",
-        rows: count,
-        version,
-        inputs: {
-          userId: "synthetic-demo",
-          mode: "PAPER",
-          marks: { SYNTH: "110" },
-        },
-        plan,
-      },
+      { fixture: "seed-v1", user: "synthetic-demo", mode: "PAPER", info, plan },
       null,
       2,
     ),
   );
 }
-main().finally(() => prisma.$disconnect());
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exitCode = 1;
+  })
+  .finally(() => prisma.$disconnect());

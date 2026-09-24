@@ -111,13 +111,23 @@ it("SQL ledger matches independently calculated seed values", async () => {
   expect(result.complete).toBe(true);
 });
 
-it("aggregate user parameters cannot inject SQL", async () => {
-  const result = await ledger("synthetic-demo' OR true --");
-  expect(Number(result.realized)).toBe(0);
-  expect(Number(result.unrealized)).toBe(0);
-});
-
 it("options sharing a stock ticker stay unpriced without a contract mark", async () => {
-  const trade = await createTrade("synthetic-a", {ticker:"SYNTH",type:"OPTION",side:"BUY",quantity:"1",entryPrice:"2",optionType:"CALL",strike:"110",expiration:"2026-12-18"});
-  try { const result=await ledger("synthetic-a"); expect(result.unpriced).toBe(1); expect(result.complete).toBe(false); expect(Number(result.unrealized)).toBe(100); } finally { await deleteTrade("synthetic-a",trade.id); }
+  const trade = await createTrade("synthetic-a", {
+    ticker: "SYNTH",
+    type: "OPTION",
+    side: "BUY",
+    quantity: "1",
+    entryPrice: "2",
+    optionType: "CALL",
+    strike: "110",
+    expiration: "2026-12-18",
+  });
+  try {
+    const result = await ledger("synthetic-a");
+    expect(result.unpriced).toBe(1);
+    expect(result.complete).toBe(false);
+    expect(Number(result.unrealized)).toBe(100);
+  } finally {
+    await deleteTrade("synthetic-a", trade.id);
+  }
 });

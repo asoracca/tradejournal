@@ -1,0 +1,52 @@
+{
+  "startedAt": "2026-09-24T03:44:37.985Z",
+  "os": "darwin",
+  "osRelease": "25.5.0",
+  "architecture": "arm64",
+  "cpu": "Apple M5",
+  "logicalCpus": 10,
+  "memoryBytes": 17179869184,
+  "node": "v24.19.0",
+  "springBoot": "4.1.1",
+  "dataset": {
+    "version": 1,
+    "seed": "fixed-synth-1000-v1",
+    "baseRows": 1000,
+    "open": 500,
+    "closed": 500,
+    "quantity": "1",
+    "entry": "100",
+    "exitOrMark": "110"
+  },
+  "workload": {
+    "cyclesPerRun": 200,
+    "requestsPerCycle": 7,
+    "warmupCyclesPerRun": 20,
+    "concurrency": [
+      1,
+      8
+    ],
+    "repeats": 3,
+    "operations": [
+      "create",
+      "edit",
+      "read-open",
+      "close",
+      "read-closed",
+      "portfolio",
+      "delete"
+    ],
+    "marks": "synthetic-fixed",
+    "client": "Node fetch keep-alive, one sequential lifecycle per worker",
+    "timing": "client monotonic wall clock through HTTP JSON parsing; excludes warmup",
+    "scope": "direct signed Java REST API, local PostgreSQL; excludes Next.js, browser, Gemini, external quotes, TLS, WAN"
+  },
+  "jvmFlags": "defaults; no profiler/JaCoCo agent on benchmark server",
+  "poolSize": 8,
+  "java": "openjdk version \"21.0.12.1\" 2026-08-18 LTS\nOpenJDK Runtime Environment Temurin-21.0.12.1+1 (build 21.0.12.1+1-LTS)\nOpenJDK 64-Bit Server VM Temurin-21.0.12.1+1 (build 21.0.12.1+1-LTS, mixed mode, sharing)",
+  "sourceManifest": "source-manifest.json",
+  "sourceSha256": "a6f9bf72fa14a75d3e5ac57c53ed73848bf9f3677fadf6402dcd8807389d7bdb",
+  "baseCommit": "900dba7709e3c22856072731d177874d922b1003",
+  "workingTree": "uncommitted Java slice; source manifest records the measured files",
+  "postgres": "PostgreSQL 18.4 on x86_64-apple-darwin24.6.0, compiled by Apple clang version 17.0.0 (clang-1700.6.3.2), 64-bit"
+}

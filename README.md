@@ -1,58 +1,67 @@
 # TradeGoons
 
-A private, multi-user paper-trading journal built with Next.js 15.5, React 18, TypeScript and PostgreSQL. It records trades, closes positions, calculates P&L, previews CSV imports and offers optional Gemini coaching. It does not place brokerage orders.
+A multi-user **paper-trading journal**, not a brokerage. The existing Next.js 15 / React 18 / TypeScript interface uses a Java 21 / Spring Boot 4.1 API for the complete trade lifecycle and decimal portfolio calculations. PostgreSQL stores owned trades; Gemini remains optional.
 
-## Run the offline demo
+## Run locally without external keys
 
-Use Node.js 22 or 24 and npm. The lockfile pins the tested versions. Installation downloads dependencies and the local PostgreSQL binary; after installation the synthetic demo needs no API keys or external services.
+Prerequisites: **Java 21**, **Node.js 22 or 24**, and npm on macOS/Linux. The checked-in Maven wrapper pins Maven 3.9.11 and verifies its distribution checksum. Initial dependency installation needs internet access; the installed synthetic demo does not.
 
 ```sh
 npm ci
 npm run db:local
 ```
 
-Keep that terminal running. This creates **only** a loopback PostgreSQL database, `tradegoons_test`, and writes local `.env` settings. Use a second terminal:
+Leave PostgreSQL running. This creates only the loopback `tradegoons_test` database and writes ignored `.env` configuration. In a second terminal:
 
 ```sh
 npm run db:migrate
 npm run db:grant-demo
 npm run db:seed
+npm run java:build
+npm run java:migrate
+npm run java:run
+```
+
+Leave Java running. In a third terminal:
+
+```sh
 npm run dev -- --hostname 127.0.0.1
 ```
 
-Open [the local app](http://127.0.0.1:3000). Sign in with a synthetic account from `.local/demo-accounts.json`: `a@example.test` and `b@example.test` can write; `demo@example.test` is read-only. Passwords are generated locally, never committed. `npm run db:seed` resets only those accounts in the local test database. Stop the database with Ctrl-C. It persists under `.local/` between runs.
+Open [localhost](http://127.0.0.1:3000). Use the generated credentials in `.local/demo-accounts.json`: `a@example.test` and `b@example.test` are synthetic writable accounts; `demo@example.test` is read-only. Never commit that file. Re-running `db:seed` resets only the local synthetic accounts. Stop the servers with Ctrl-C.
 
-Seed v1 contains 10 synthetic shares bought at $100, marked at a fixed $110, plus 5 shares sold short at $120 and closed at $110. The SQL ledger returns **$50.00 realized and $100.00 marked unrealized P&L** per account. These are arithmetic fixtures, not performance claims. Log another 10-share paper trade at $100 and close it at $110: realized P&L becomes $150.00.
+**Example:** seed v1 has $50.00 realized and $100.00 marked unrealized P&L. Create 10 shares of DEMO at $100, edit quantity to 12.5, and close at $110.005. That trade realizes **$125.06**, and the portfolio's realized total becomes **$175.06**. While signed in as A, `/api/trades/synthetic-b-open` returns 404. These are deterministic arithmetic examples, not investment results.
 
-## Validation
+## Validate and measure
+
+With PostgreSQL and Java running:
 
 ```sh
+npm run java:test              # JUnit + HTTP + real PostgreSQL; JaCoCo report
 npm run typecheck
 npm run lint
 npm test
-npm run test:integration
-npm run test:migrations
+npm run test:integration       # Next.js adapter → Java → PostgreSQL
+npm run test:migrations        # isolated legacy preservation/rollback rehearsal
 npx playwright install chromium
 npm run build
-npm run start -- --hostname 127.0.0.1
-# Separate terminal, with the seeded server running:
-npm run test:e2e
-npx tsx scripts/explain.ts
+npm run start -- --hostname 127.0.0.1  # stop dev first; keep this running
+# Another terminal:
+npm run test:e2e               # UI create/edit/read/close + ownership + UI states
+node scripts/benchmark.mjs docs/benchmarks/local-run
 ```
 
-CI uses disposable PostgreSQL and tests the production build. Unit tests cover decimal accounting, invalid input, CSV escaping, disabled AI and provider outages. Integration tests exercise actual SQL constraints, concurrent close/import requests and ownership. Browser tests use separate authenticated users and probe trade/comment/asset reads, writes, deletes and exports. Screenshots are written to `test-results/`.
+CI provisions disposable PostgreSQL, Java and Node, and runs those checks against production builds. The benchmark is **not** a CI timing gate. See the [three-minute demo walkthrough and screenshots](docs/demo/README.md), [measured results and raw samples](docs/benchmarks/README.md), [REST contracts](docs/api.md), [architecture and JavaScript fundamentals](docs/architecture.md), and [migration/rollback](docs/java-migration.md).
 
-## Architecture and limits
+## Ownership and limits
 
-React forms → authenticated Next.js route handlers → reusable Zod contracts → owner-scoped Prisma services → PostgreSQL constraints and parameterized SQL aggregates. Server sessions, not request-supplied user IDs, determine ownership. See [architecture](docs/architecture.md), [database migration procedure](docs/migrations.md), and [query plan method](docs/query-plan.md).
+- Java is the sole trade read/write/validation/P&L implementation, including CSV commits and comments. Next.js authenticates sessions, signs internal requests, translates CSV, supplies market marks and calls Gemini. There is no fallback trading implementation if Java is unavailable.
+- Decimal values use `numeric(20,6)` / `BigDecimal`; financial JSON uses strings. Each position rounds to cents using `HALF_UP` before summation. The UI preserves exact strings for edits and formats Java-calculated totals. Sizing, stop/target suggestions, charts and visual risk indicators are estimates, not accounting records.
+- Stock lots and standard 100-share options are supported. Options without contract-specific marks are reported as unpriced; stock prices never value an option. No partial closes, futures, adjusted multipliers, fees, tax lots, dividends, FX or live execution. Market value is **gross marked exposure**, and equity is the user-entered starting balance plus P&L, not brokerage buying power.
+- Synthetic quotes are labeled. `MARKET_DATA_MODE=live` opts into the existing unofficial market adapter with timeouts/cache/stale states; availability is not guaranteed. Gemini commentary, analysis, chat and extraction require `GEMINI_API_KEY` and send submitted context to Google. Without a key, no Gemini request is made.
+- Existing unowned rows remain in the restricted legacy archive. No automatic owner assignment, startup migration, production migration or hosted deployment is part of the Java cutover. The local user authentication has no public registration, password recovery or MFA. Java binds to loopback; production needs private networking/TLS, secret management and operational abuse controls.
+- Portfolio calculation scans one owner's selected rows; the measured workload is 1,000 synthetic rows. There is no production-scale claim. See the benchmark limitations before interpreting its numbers.
 
-- Stock trades and standard 100-share options are supported. No partial closes, fees, taxes, FX, dividends or adjusted option multipliers. New futures trades are rejected until contract multipliers are modeled. Each entry is a separate lot; closed rows cannot be edited.
-- Decimal prices and quantities use six places. Each position's P&L rounds to cents, half away from zero, before summing. Dashboard totals come from SQL; individual cards retain approximate JavaScript display calculations.
-- Synthetic quotes and history are fixed, prominently labeled demo inputs. `MARKET_DATA_MODE=live` opts into unofficial Yahoo endpoints; quotes carry source, timestamp and stale status. Missing marks are reported as incomplete; underlying stock quotes never value options. News/options/disclosure lists are empty offline. External endpoints are not guaranteed.
-- Gemini is optional. Set `GEMINI_API_KEY` to enable educational commentary, analysis, chat and file extraction. Those features send submitted trade/file context to Google. Without a key they perform no Gemini request and the journal works normally. They do not provide buy/sell recommendations or price predictions.
-- Local credentials use NextAuth v4, scrypt and short-lived encrypted sessions. Accounts are provisioned locally; there is no public registration, password recovery or MFA. A database-backed per-account attempt limit is included; internet-facing deployment also requires edge rate limiting and operational monitoring.
-- The framework uses the patched Next.js 15.5 maintenance release, retaining React 18. Run `npm audit` and the validation suite before each release; an audit is not a complete security assessment.
+CSV previews use Java's canonical validator, commits reject batches containing errors, and owner-scoped fingerprints prevent duplicate imports (including pre-Java fingerprints). Exports escape spreadsheet-formula text; they are audit exports, not complete round-trip backups.
 
-CSV import accepts `ticker,type,side,quantity,entryPrice` plus optional trade fields. Preview reports every row error; commit rejects the entire batch if any row is invalid. An account-scoped hash of normalized row contents skips identical rows across retries/files; edit a field if a second otherwise-identical lot is intentional. Deleting a row permits reimport. Exports contain your trades/comments only and prefix potentially active spreadsheet text with an apostrophe. Export includes closed-state fields, so it is an audit export, not a round-trip import format.
-
-Existing source comments retain attribution to public market/disclosure sources and the volatility method. Dependency licenses remain with their packages; embedded PostgreSQL documents its PostgreSQL/zonky and wrapper licenses. No original repository license file was present; no license or authorship claim is added here.
+Existing attribution for market/disclosure sources and volatility methods is retained. Dependencies keep their own licenses; generated Maven wrapper scripts retain Apache notices. No original repository license was present, and no authorship or license claim is added.
