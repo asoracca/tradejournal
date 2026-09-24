@@ -26,3 +26,5 @@ Apply the additive index with the migration role and remove that credential from
 Stop both writers and deploy the prior matching Next.js-only version from `900dba7`. Its trade schema and six-place decimals are unchanged, and new Java-created UUID IDs are valid text IDs for that version. ClosedAt and CSV fingerprint semantics remain compatible. Existing and newly created rows stay in place. The extra index/Flyway history may remain harmlessly; dropping the added index is optional and should be a separate reviewed migration, not an automatic destructive down script.
 
 Do **not** roll back to the original unowned main application and publicly expose its records. That is a different, higher-risk migration described in the archive document. No hosted database was read or modified during the Java implementation, and no Java cutover was deployed.
+
+Automatic Vercel deployments are disabled for `feat/java-trade-lifecycle` in `vercel.json` while the private Java hosting is unconfigured. Other branches keep their existing behavior. See [Vercel Git configuration](https://vercel.com/docs/project-configuration/git-configuration).
